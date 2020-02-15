@@ -10,17 +10,30 @@ sudo apt-get install graphviz
 ```
 
 ### Third party python lib requirements:
-1. graphviz
+It is better to use virtual environment (e.g., Anaconda) to run the code
+
+1. tensorflow-gpu(version >= 1.5):
+```bash
+	pip install tensorflow-gpu==1.14
+```
+2. graphviz
 ```bash
 	pip install graphviz
 ```
 
-2. pydotplus
+3. pydotplus
 ```bash
 	pip install pydotplus
 ```
 
-3. gym
+4. gym
 ```bash
 	pip install gym
 ```
+
+### Run the code
+```bash
+	python offloading_ppo.py
+```
+
+Get the result from the log file defined in offloading_ppo.py. 

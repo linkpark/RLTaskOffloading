@@ -11,7 +11,7 @@ from RLWorkflow.common.tf_util import get_session, save_variables, load_variable
 import RLWorkflow.common.tf_util as U
 from RLWorkflow.common.mpi_util import sync_from_root
 from RLWorkflow.common.console_util import fmt_row
-from RLWorkflow.ppo3.seq2seq_policy import Seq2seqPolicy
+from RLWorkflow.offloading_ppo.seq2seq_policy import Seq2seqPolicy
 from RLWorkflow import logger
 
 from RLWorkflow.environment.offloading_env import OffloadingEnvironment

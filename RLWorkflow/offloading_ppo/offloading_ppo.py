@@ -11,7 +11,7 @@ from RLWorkflow.common.tf_util import get_session, save_variables, load_variable
 import RLWorkflow.common.tf_util as U
 from RLWorkflow.common.mpi_util import sync_from_root
 from RLWorkflow.common.console_util import fmt_row
-from RLWorkflow.ppo3.seq2seq_policy import Seq2seqPolicy
+from RLWorkflow.offloading_ppo.seq2seq_policy import Seq2seqPolicy
 from RLWorkflow import logger
 
 from RLWorkflow.environment.offloading_env import OffloadingEnvironment
@@ -328,7 +328,6 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
         for eval_env in eval_envs:
             eval_runners.append(Runner(env=eval_env, model=model, nepisode=1, gamma=gamma, lam=lam))
 
-    # define the saver
 
     # Start total timer
     tfirststart = time.time()
