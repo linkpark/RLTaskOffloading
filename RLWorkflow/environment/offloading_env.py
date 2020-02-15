@@ -2,7 +2,6 @@ import numpy as np
 import os
 
 from RLWorkflow.environment.offloading_task_graph import OffloadingTaskGraph
-from RLWorkflow.environment.ga_workflow import basic_ga
 """
 System bandwidth B 20MHz
 UE Bandwidth W 1 MHz
@@ -430,22 +429,6 @@ class OffloadingEnvironment(object):
             min_running_time_batchs.append(min_running_time_vector[start_batch_index:end_batch_index])
 
         return encoder_batchs, encoder_lengths, task_graph_batchs, decoder_full_lengths, max_running_time_batchs, min_running_time_batchs
-
-    def ga_solution(self):
-        finish_time_batch = []
-        for task_graph_batch in self.task_graphs:
-            finish_time_plan = []
-            for task_graph in task_graph_batch:
-                self.resource_cluster.reset()
-                _, _, hof = basic_ga(task_graph, self.get_scheduling_cost_by_plan)
-                optimal_plan = np.array(hof[0])
-                task_finish_time = self.get_scheduling_cost_by_plan(optimal_plan, task_graph)
-                finish_time_plan.append(task_finish_time)
-
-            finish_time_batch.append(finish_time_plan)
-
-        return finish_time_batch
-
 
     def get_scheduling_cost_by_plan(self, plan, task_graph, heft=True):
         plan_sequence = []
