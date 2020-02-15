@@ -344,17 +344,6 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
         print("sample time cost: ", (sample_time_cost - tstart))
         print(np.array(mb_encoder_batch).shape)
 
-        # data_set = Dataset(dict(encoder_input=np.array(mb_encoder_batch),
-        #                         encoder_length=np.array(mb_encoder_length),
-        #                         decoder_input=np.array(mb_decoder_input),
-        #                         decoder_target=np.array(mb_actions),
-        #                         decoder_full_length=np.array(mb_decoder_length),
-        #                         returns=np.array(mb_tdlamret),
-        #                         advs = np.array(mb_adv),
-        #                         values=np.array(mb_values),
-        #                         neglogpacs=np.array(mb_neglogpacs)),
-        #                         deterministic=False, shuffle=False)
-
         data_set = Dataset(dict(encoder_input=mb_encoder_batch,
                                 encoder_length=mb_encoder_length,
                                 decoder_input=mb_decoder_input,
@@ -486,15 +475,15 @@ if __name__ == "__main__":
                                  mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=8.0, bandwith_dl=8.0)
 
     env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=500, graph_number=500,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random10/random.10.",
-                                                  "/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random15/random.15.",
-                                                  "/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random20/random.20.",
-                                                  "/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random25/random.25.",
-                                                  "/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random30/random.30.",
-                                                  "/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random35/random.35.",
-                                                  "/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random40/random.40.",
-                                                  "/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random45/random.45.",
-                                                  "/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random50/random.50.",
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random10/random.10.",
+                                                  "./RLWorkflow/offloading_data/offload_random15/random.15.",
+                                                  "./RLWorkflow/offloading_data/offload_random20/random.20.",
+                                                  "./RLWorkflow/offloading_data/offload_random25/random.25.",
+                                                  "./RLWorkflow/offloading_data/offload_random30/random.30.",
+                                                  "./RLWorkflow/offloading_data/offload_random35/random.35.",
+                                                  "./RLWorkflow/offloading_data/offload_random40/random.40.",
+                                                  "./RLWorkflow/offloading_data/offload_random45/random.45.",
+                                                  "./RLWorkflow/offloading_data/offload_random50/random.50.",
                                                   ],
                                                   #"../data/offload_random15/random.15."],
                                 time_major=False,
@@ -503,63 +492,63 @@ if __name__ == "__main__":
     #env.calculate_optimal_solution()
     eval_envs = []
     eval_env_1 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random10_test/random.10."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random10_test/random.10."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 
     eval_envs.append(eval_env_1)
 
     eval_env_2 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random15_test/random.15."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random15_test/random.15."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 
     eval_envs.append(eval_env_2)
 
     eval_env_3 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random20_test/random.20."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random20_test/random.20."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 
     eval_envs.append(eval_env_3)
 
     eval_env_4 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random25_test/random.25."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random25_test/random.25."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 
     eval_envs.append(eval_env_4)
 
     eval_env_5 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random30_test/random.30."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random30_test/random.30."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 
     eval_envs.append(eval_env_5)
 
     eval_env_6 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random35_test/random.35."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random35_test/random.35."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 
     eval_envs.append(eval_env_6)
 
     eval_env_7 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random40_test/random.40."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random40_test/random.40."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 
     eval_envs.append(eval_env_7)
 
     eval_env_8 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random45_test/random.45."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random45_test/random.45."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 
     eval_envs.append(eval_env_8)
 
     eval_env_9 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["/home/wj/code/RLWorkflowV2/RLWorkflow/offloading_data/offload_random50_test/random.50."],
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random50_test/random.50."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
 

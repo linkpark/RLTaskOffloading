@@ -19,3 +19,8 @@ sudo apt-get install graphviz
 ```bash
 	pip install pydotplus
 ```
+
+3. gym
+```bash
+	pip install gym
+```
