@@ -1,0 +1,464 @@
+"""
+To implement the policy gradient method fo offlaoding ppo.
+"""
+
+import tensorflow as tf
+import numpy as np
+import itertools
+import functools
+import time
+
+from mpi4py import MPI
+
+from RLWorkflow.common.mpi_adam_optimizer import MpiAdamOptimizer
+from RLWorkflow.common.tf_util import get_session, save_variables, load_variables, initialize
+import RLWorkflow.common.tf_util as U
+from RLWorkflow.common.mpi_util import sync_from_root
+from RLWorkflow.common.console_util import fmt_row
+from RLWorkflow.ppo3.seq2seq_policy import Seq2seqPolicy
+from RLWorkflow import logger
+
+from RLWorkflow.environment.offloading_env import OffloadingEnvironment
+from RLWorkflow.environment.offloading_env import Resources
+
+from RLWorkflow.common.dataset import Dataset
+from RLWorkflow.common.misc_util import zipsame
+
+logger.configure('./log/offloading_pg', ['stdout', 'json', 'csv'])
+
+hparams = tf.contrib.training.HParams(
+        unit_type="lstm",
+        num_units=256,
+        learning_rate=0.00005,
+        supervised_learning_rate = 0.00005,
+        n_features=2,
+        time_major=False,
+        is_attention=False,
+        forget_bias=1.0,
+        dropout=0,
+        num_gpus=1,
+        num_layers=2,
+        num_residual_layers=0,
+        is_greedy=False,
+        inference_model="sample",
+        start_token=0,
+        end_token=5,
+        is_bidencoder=False
+    )
+
+class S2SModel_Back(object):
+    def __init__(self, *, ob, ob_length, ent_coef, vf_coef, max_grad_norm):
+        sess = get_session()
+        # sequential state
+
+        # sequential action
+        decoder_input = tf.placeholder(tf.int32, [None, None])
+        action = tf.placeholder(tf.int32, [None, None])
+        action_length = tf.placeholder(tf.int32, [None])
+        # sequential adv
+        adv = tf.placeholder(tf.float32, [None, None])
+        # sequential reward
+        r = tf.placeholder(tf.float32, [None, None])
+
+        # keep track of old actor(sequential descision)
+        oldneglogpac = tf.placeholder(tf.float32, [None, None])
+        oldvpred = tf.placeholder(tf.float32, [None, None])
+        lr = tf.placeholder(tf.float32, [])
+
+        # Cliprange
+        cliprange = tf.placeholder(tf.float32, [])
+
+        train_model = Seq2seqPolicy("pi", hparams, reuse=True, encoder_inputs=ob,
+                                     encoder_lengths=ob_length,
+                                     decoder_inputs=decoder_input,
+                                     decoder_full_length=action_length,
+                                     decoder_targets=action)
+
+        # define the policy gradient method for seq2seq neural network.
+
+        pg_loss = -tf.reduce_mean(train_model.logp() * adv)
+        vpred = train_model.vf
+        vpredclipped = oldvpred + tf.clip_by_value(train_model.vf - oldvpred, -cliprange, cliprange)
+
+        # Unclipped value
+        vf_losses1 = tf.square(vpred - r)
+        vf_loss = tf.reduce_mean(vf_losses1)
+
+
+        # vanilla policy gradient loss function
+        loss = pg_loss + vf_loss * vf_coef
+        # Update the parameters using loss
+        # 1. get the model parameters
+        params = tf.trainable_variables('pi')
+
+        # 2. Build our trainer
+        trainer = MpiAdamOptimizer(MPI.COMM_WORLD, learning_rate=lr, epsilon=1e-5)
+
+        # 3. Calculate the gradients
+        grads_and_var = trainer.compute_gradients(loss, params)
+        grads, var = zip(*grads_and_var)
+
+        if max_grad_norm is not None:
+            # Clip the gradients (normalize)
+            grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+        grads_and_var = list(zip(grads, var))
+        # zip aggregate each gradient with parameters associated
+        # For instance zip(ABCD, xyza) => Ax, By, Cz, Da
+
+        _train = trainer.apply_gradients(grads_and_var)
+
+        # decoder_input action_length is speciallized for the training model
+        def train(learning_reate, clipingrange, obs, obs_length,
+                  returns, advs, decoder_inputs,  actions, decoder_full_length,
+                  values, neglogpacs, states=None):
+            # the advantage function is calculated as A(s,a) = R + yV(s') - V(s)
+            # the return = R + yV(s')
+
+            # Sequential Normalize the advantages
+            advs = (advs - np.mean(advs, axis=0)) / (np.std(advs, axis=0) + 1e-8)
+
+            td_map = {train_model.encoder_inputs: obs, train_model.encoder_lengths:obs_length,
+                      decoder_input:decoder_inputs, action: actions, action_length: decoder_full_length, adv:advs,
+                      r: returns, lr:learning_reate, cliprange:clipingrange, oldneglogpac:neglogpacs, oldvpred: values}
+
+            return sess.run([pg_loss, vf_loss,  _train], td_map)[:-1]
+
+        self.loss_names = ['policy_loss', 'value_loss']
+
+        self.train = train
+        self.train_model = train_model
+        self.time_major = self.train_model.time_major
+        self.act_model = train_model
+
+        self.step = self.act_model.step
+        self.greedy_predict = self.act_model.greedy_predict
+
+        self.save = functools.partial(save_variables, sess=sess)
+        self.load = functools.partial(load_variables, sess=sess)
+
+        if MPI.COMM_WORLD.Get_rank() == 0:
+            initialize()
+        global_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="")
+        sync_from_root(sess, global_variables)
+
+
+class Runner():
+    def __init__(self, env, model, nepisode, gamma, lam):
+        self.lam = lam
+        self.gamma = gamma
+        self.model = model
+        self.nepisode = nepisode
+        self.env = env
+
+    def run(self):
+        mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [], [], [], [], [], []
+        mb_tdlamret, mb_adv = [], []
+        mb_decoder_input = []
+        mb_decoder_length = []
+        mb_encoder_batch = []
+        mb_encoder_length = []
+        mb_task_graph = []
+
+
+        for task_graph_batch, encoder_batch, encoder_length, \
+            decoder_lengths,  max_running_time, min_running_time in zip(self.env.task_graphs,
+                                                                        self.env.encoder_batchs,
+                                                                        self.env.encoder_lengths,
+                                                                        self.env.decoder_full_lengths,
+                                                                        self.env.max_running_time_batchs,
+                                                                        self.env.min_running_time_batchs):
+            for _ in range(self.nepisode):
+                actions, values, neglogpacs = self.model.step(encoder_input_batch=encoder_batch,
+                                                              decoder_full_length=decoder_lengths,
+                                                              encoder_lengths=encoder_length)
+
+                mb_encoder_batch += encoder_batch.tolist()
+                mb_encoder_length += encoder_length.tolist()
+                actions = np.array(actions)
+                values = np.array(values)
+                neglogpacs = np.array(neglogpacs)
+
+                decoder_input = np.column_stack(
+                    (np.ones(actions.shape[0], dtype=int) * self.env.start_symbol, actions[:, 0:-1]))
+                mb_decoder_input += decoder_input.tolist()
+                mb_decoder_length += decoder_lengths.tolist()
+                mb_actions += actions.tolist()
+                mb_values += values.tolist()
+                mb_neglogpacs += neglogpacs.tolist()
+
+                rewards = self.env.step(task_graph_batch=task_graph_batch, action_sequence_batch=actions,
+                                        max_running_time_batch=max_running_time, min_running_time_batch=min_running_time)
+
+                mb_rewards += rewards.tolist()
+                mb_task_graph += task_graph_batch
+
+                time_length = values.shape[1]
+                batch_size = values.shape[0]
+                vpred_batch = np.column_stack((values, np.zeros(batch_size, dtype=float)))
+                last_gae_lam = np.zeros(batch_size, dtype=float)
+                tdlamret = []
+                adv = []
+
+                for t in reversed(range(time_length)):
+                    delta = rewards[:, t] + self.gamma * vpred_batch[:, t + 1] - vpred_batch[:, t]
+                    gaelam = last_gae_lam = delta + self.gamma * self.lam * last_gae_lam
+                    adv.append(gaelam)
+                    tdlam = vpred_batch[:, t + 1] + gaelam
+                    tdlamret.append(tdlam)
+
+                # tdlamret.reverse()
+                adv.reverse()
+                adv = np.array(adv).swapaxes(0, 1)
+                mb_adv += adv.tolist()
+
+                import scipy
+                import scipy.signal
+                for reward in rewards:
+                    mb_tdlamret.append( scipy.signal.lfilter([1], [1, float(-self.gamma)], reward[::-1], axis=0)[::-1])
+
+        # return the trajectories
+        return mb_encoder_batch, mb_encoder_length, mb_decoder_input, \
+               mb_actions, mb_decoder_length, mb_values, mb_rewards, mb_neglogpacs, mb_tdlamret, mb_adv
+
+    def sample_eval(self):
+        running_cost = []
+        energy_consumption = []
+        for encoder_batch, encoder_length, decoder_lengths, task_graph_batch \
+                                                            in zip(self.env.encoder_batchs, self.env.encoder_lengths,
+                                                                  self.env.decoder_full_lengths, self.env.task_graphs):
+
+            actions, values, neglogpacs = self.model.step(encoder_input_batch=encoder_batch,
+                                                          decoder_full_length=decoder_lengths,
+                                                          encoder_lengths=encoder_length)
+            actions = np.array(actions)
+            env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
+                                                         task_graph_batch=task_graph_batch)
+
+            running_cost += env_running_cost
+            energy_consumption += env_energy_consumption
+        return running_cost, energy_consumption
+
+    def greedy_eval(self):
+        running_cost = []
+        energy_consumption = []
+
+        for encoder_batch, encoder_length, decoder_lengths, task_graph_batch \
+                in zip(self.env.encoder_batchs, self.env.encoder_lengths,
+                       self.env.decoder_full_lengths, self.env.task_graphs):
+            actions = self.model.greedy_predict(encoder_input_batch=encoder_batch,
+                                                decoder_full_length=decoder_lengths,
+                                                encoder_lengths=encoder_length)
+
+            actions = np.array(actions)
+
+            env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
+                                                         task_graph_batch=task_graph_batch)
+
+
+            running_cost += env_running_cost
+            energy_consumption += env_energy_consumption
+        return running_cost, energy_consumption
+
+
+def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1000, nsample_episode=30, nsteps=2048, ent_coef=0.01, lr=1e-4,
+          vf_coef=0.5, max_grad_norm=0.5, gamma=0.99, lam=0.95, optbatchnumber=500,
+          log_interval=1, nminibatches=4, noptepochs=4, cliprange=0.2,
+          save_interval=0, load_path=None, **network_kwargs):
+
+    #policy = build_policy(env, network, hparameters=hparams)
+
+    ob = tf.placeholder(dtype=tf.float32, shape=[None, None, env.input_dim])
+    ob_length = tf.placeholder(dtype=tf.int32, shape=[None])
+
+    make_model = lambda: S2SModel_Back(ob=ob, ob_length=ob_length, ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm)
+
+    model = make_model()
+    if load_path is not None:
+        model.load(load_path)
+    runner = Runner(env=env, model = model, nepisode=nsample_episode, gamma=gamma, lam=lam)
+
+    eval_runners = []
+    if eval_envs is not None:
+        for eval_env in eval_envs:
+            eval_runners.append(Runner(env=eval_env, model=model, nepisode=1, gamma=gamma, lam=lam))
+
+    # define the saver
+
+    # Start total timer
+    tfirststart = time.time()
+
+    mean_reward_track = []
+    for update in range(1, nupdates+1):
+        tstart = time.time()
+        # Get the learning rate
+        lrnow = lr
+        # Get the clip range
+        cliprangenow = cliprange
+        # Get minibatchs
+
+        mb_encoder_batch, mb_encoder_length, mb_decoder_input, mb_actions, mb_decoder_length, \
+        mb_values, mb_rewards, mb_neglogpacs, mb_tdlamret, mb_adv = runner.run()
+
+        sample_time_cost = time.time()
+        print("sample time cost: ", (sample_time_cost - tstart))
+        print(np.array(mb_encoder_batch).shape)
+
+        print("sampled data length is: ", len(mb_encoder_batch))
+
+        data_set = Dataset(dict(encoder_input=mb_encoder_batch,
+                                encoder_length=mb_encoder_length,
+                                decoder_input=mb_decoder_input,
+                                decoder_target=mb_actions,
+                                decoder_full_length=mb_decoder_length,
+                                returns=mb_tdlamret,
+                                advs =mb_adv,
+                                values=mb_values,
+                                neglogpacs=mb_neglogpacs),
+                                deterministic=True, shuffle=False)
+
+        mean_reward = np.mean(np.sum(mb_rewards, axis=-1))
+
+        mblossvals = []
+
+        # optimal policy update steps
+        logger.log(fmt_row(13, model.loss_names))
+        for _ in range(noptepochs):
+            for batch in data_set.iterate_once(optbatchnumber):
+                encoder_input = batch["encoder_input"]
+                returns_batch = batch["returns"]
+                advs_batch = batch["advs"]
+                decoder_input = batch["decoder_input"]
+                decoder_target = batch["decoder_target"]
+                values_batch = batch["values"]
+                neglogpacs_batch = batch["neglogpacs"]
+
+                if model.time_major == True:
+                    encoder_input = np.array(encoder_input).swapaxes(0,1)
+                    returns_batch = np.array(returns_batch).swapaxes(0,1)
+                    advs_batch = np.array(advs_batch).swapaxes(0,1)
+                    decoder_input = np.array(decoder_input).swapaxes(0,1)
+                    decoder_target = np.array(decoder_target).swapaxes(0,1)
+                    values_batch = np.array(values_batch).swapaxes(0,1)
+                    neglogpacs_batch = np.array(neglogpacs_batch).swapaxes(0,1)
+
+                batch_loss = model.train(
+                                learning_reate=lrnow,
+                                clipingrange=cliprangenow,
+                                obs=encoder_input,
+                                obs_length=batch["encoder_length"],
+                                returns=returns_batch,
+                                advs=advs_batch,
+                                decoder_inputs=decoder_input,
+                                actions=decoder_target,
+                                decoder_full_length=batch["decoder_full_length"],
+                                values=values_batch,
+                                neglogpacs=neglogpacs_batch)
+                mblossvals.append(batch_loss)
+            logger.log(fmt_row(13, np.mean(mblossvals, axis=0)))
+
+
+        running_cost = []
+        energy_consumption = []
+        greedy_running_cost = []
+        greedy_energy_consumption = []
+        for eval_runner in eval_runners:
+            Tc, Ec = eval_runner.sample_eval()
+            greedy_Tc, greedy_Ec = eval_runner.greedy_eval()
+
+            Tc = np.mean(Tc)
+            Ec = np.mean(Ec)
+            greedy_Tc = np.mean(greedy_Tc)
+            greedy_Ec = np.mean(greedy_Ec)
+
+            running_cost.append(Tc)
+            energy_consumption.append(Ec)
+            greedy_running_cost.append(greedy_Tc)
+            greedy_energy_consumption.append(greedy_Ec)
+
+        lossvals = np.mean(mblossvals, axis=0)
+        # End timer
+        tnow = time.time()
+
+        mean_reward_track.append(mean_reward)
+        if update % log_interval == 0 or update == 1:
+            # save model
+            model.save("./checkpoint/model.ckpt")
+            print("model saved!")
+
+            # Calculates if value function is a good predicator of the returns (ev > 1)
+            # or if it's just worse than predicting nothing (ev =< 0)
+            logger.logkv('time_step', update)
+            logger.logkv('time_elapsed', tnow - tfirststart)
+            logger.logkv('time_one_episode', tnow - tstart)
+
+            j = 0
+            for eval_env, run_time, energy, greedy_run_time,greedy_energy in zip(eval_envs, running_cost,
+                                                                                 energy_consumption,
+                                                                                 greedy_running_cost,
+                                                                                 greedy_energy_consumption):
+                logger.logkv(str(j)+'th run time cost', run_time)
+                logger.logkv(str(j)+'th energy cost', energy)
+
+                logger.logkv(str(j)+'th greedy run time cost', greedy_run_time)
+                logger.logkv(str(j)+'th greedy energy cost', greedy_energy)
+
+                logger.logkv(str(j)+'th all locally time cost', eval_env.all_locally_execute[0])
+                logger.logkv(str(j)+'th all locally energy cost', eval_env.all_locally_energy)
+                logger.logkv(str(j)+'th all remote time cost', eval_env.all_mec_execute[0])
+                logger.logkv(str(j)+'th all remote energy cost', eval_env.all_mec_energy)
+                logger.logkv(str(j) + 'th optimal time cost', eval_env.optimal_solution)
+                logger.logkv(str(j) + 'th optimal energy cost', eval_env.optimal_energy)
+                j += 1
+
+            #logger.logkv('optimal run time cost', eval_env.optimal_solution[0])
+            logger.logkv('mean reward', mean_reward)
+
+            for (lossval, lossname) in zip(lossvals, model.loss_names):
+                logger.logkv(lossname, lossval)
+
+            if MPI.COMM_WORLD.Get_rank() == 0:
+                logger.dumpkvs()
+
+    return mean_reward_track
+
+
+if __name__ == "__main__":
+    lambda_t = 1.0
+    lambda_e = 0.0
+
+    resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
+                                 mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
+
+    env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
+                                graph_file_paths=["../data/offload_random15/random.15."],
+                                time_major=False,
+                                lambda_t=lambda_t, lambda_e=lambda_e)
+
+    #env.calculate_optimal_solution()
+    eval_envs = []
+    eval_env_1 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
+                                graph_file_paths=["../data/offload_random15/random.15."],
+                                time_major=False,
+                                lambda_t=lambda_t, lambda_e=lambda_e)
+    # eval_env_1.calculate_optimal_solution()
+
+    eval_envs.append(eval_env_1)
+    # eval_env = env
+    print("Finishing initialization of environment")
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        mean_reward_track = learn(network="default", env=env, eval_envs=eval_envs, nsample_episode=20, nupdates=1500,
+                                  max_grad_norm=1.0, noptepochs=1,gamma=0.99,
+                                  total_timesteps=80000, lr=5e-4, optbatchnumber=2000, load_path=None, ent_coef=0.0)
+                                  # load_path='./checkpoint/model.ckpt')
+
+    x = np.arange(0, len(mean_reward_track), 1)
+
+    print("Maxmium episode reward is {}".format(np.max(mean_reward_track)))
+
+    import matplotlib.pyplot as plt
+    plt.plot(x, mean_reward_track)
+    plt.xlabel('episode')
+    plt.ylabel('reward')
+    plt.show()
