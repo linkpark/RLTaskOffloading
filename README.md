@@ -37,3 +37,7 @@ It is better to use virtual environment (e.g., Anaconda) to run the code
 ```
 
 Get the result from the log file defined in offloading_ppo.py. 
+
+Related paper:
+
+Wang J, Hu J, Min G, et al. Computation offloading in multi-access edge computing using a deep sequential model based on reinforcement learning[J]. IEEE Communications Magazine, 2019, 57(5): 64-69.
