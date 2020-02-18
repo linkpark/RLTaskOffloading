@@ -44,6 +44,23 @@ hparams = tf.contrib.training.HParams(
     )
 
 
+def calculate_qoe(latency_batch, energy_batch, env):
+    all_local_time, all_local_energy = env.get_all_locally_execute_time_batch()
+    all_local_time = np.squeeze(all_local_time)
+    all_local_energy = np.squeeze(all_local_energy)
+    latency_batch = np.squeeze(latency_batch)
+    energy_batch = np.squeeze(energy_batch)
+    qoe_batch = []
+
+    for latency, energy, single_all_local_latency, single_all_local_energy in zip(latency_batch, energy_batch, all_local_time, all_local_energy):
+        qoe = env.lambda_t * ((latency - single_all_local_latency) / single_all_local_latency) + \
+              env.lambda_e * ((energy - single_all_local_energy) / single_all_local_energy)
+
+        qoe = -qoe
+        qoe_batch.append(qoe)
+
+    return qoe_batch
+
 class S2SModel_Back(object):
     def __init__(self, *, ob, ob_length, ent_coef, vf_coef, max_grad_norm):
         sess = get_session()
@@ -254,6 +271,8 @@ class Runner():
     def sample_eval(self):
         running_cost = []
         energy_consumption = []
+        running_qoe = []
+
         for encoder_batch, encoder_length, decoder_lengths, task_graph_batch \
                                                             in zip(self.env.encoder_batchs, self.env.encoder_lengths,
                                                                   self.env.decoder_full_lengths, self.env.task_graphs):
@@ -265,13 +284,17 @@ class Runner():
             env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
                                                          task_graph_batch=task_graph_batch)
 
+            qoe = calculate_qoe(env_running_cost, env_energy_consumption, self.env)
+
             running_cost += env_running_cost
             energy_consumption += env_energy_consumption
-        return running_cost, energy_consumption
+            running_qoe += qoe
+        return running_cost, energy_consumption, running_qoe
 
     def greedy_eval(self):
         running_cost = []
         energy_consumption = []
+        running_qoe = []
 
         for encoder_batch, encoder_length, decoder_lengths, task_graph_batch \
                 in zip(self.env.encoder_batchs, self.env.encoder_lengths,
@@ -290,10 +313,12 @@ class Runner():
             env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
                                                          task_graph_batch=task_graph_batch)
 
+            env_qoe = calculate_qoe(env_running_cost, env_energy_consumption, self.env)
 
             running_cost += env_running_cost
             energy_consumption += env_energy_consumption
-        return running_cost, energy_consumption
+            running_qoe += env_qoe
+        return running_cost, energy_consumption, env_qoe
 
 def constfn(val):
     def f(_):
@@ -405,21 +430,30 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
 
         running_cost = []
         energy_consumption = []
+        running_qoe = []
+
         greedy_running_cost = []
         greedy_energy_consumption = []
+        greedy_qoe_batch = []
         for eval_runner in eval_runners:
-            Tc, Ec = eval_runner.sample_eval()
-            greedy_Tc, greedy_Ec = eval_runner.greedy_eval()
+            Tc, Ec, qoe = eval_runner.sample_eval()
+            greedy_Tc, greedy_Ec, greedy_qoe = eval_runner.greedy_eval()
 
             Tc = np.mean(Tc)
             Ec = np.mean(Ec)
+            qoe = np.mean(qoe)
+
             greedy_Tc = np.mean(greedy_Tc)
             greedy_Ec = np.mean(greedy_Ec)
+            greedy_qoe = np.mean(greedy_qoe)
 
             running_cost.append(Tc)
             energy_consumption.append(Ec)
+            running_qoe.append(qoe)
+
             greedy_running_cost.append(greedy_Tc)
             greedy_energy_consumption.append(greedy_Ec)
+            greedy_qoe_batch.append(greedy_qoe)
 
         lossvals = np.mean(mblossvals, axis=0)
         # End timer
@@ -438,22 +472,23 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
             logger.logkv('time_one_episode', tnow - tstart)
 
             j = 0
-            for eval_env, run_time, energy, greedy_run_time,greedy_energy in zip(eval_envs, running_cost,
+            for eval_env, run_time, energy, running_mean_qoe, greedy_run_time, greedy_energy, greedy_mean_qoe in zip(eval_envs, running_cost,
                                                                                  energy_consumption,
+                                                                                 running_qoe,
                                                                                  greedy_running_cost,
-                                                                                 greedy_energy_consumption):
-                logger.logkv(str(j)+'th run time cost', run_time)
-                logger.logkv(str(j)+'th energy cost', energy)
+                                                                                 greedy_energy_consumption,
+                                                                                  greedy_qoe_batch):
+                logger.logkv(str(j)+'th run time cost ', run_time)
+                logger.logkv(str(j)+'th energy cost ', energy)
+                logger.logkv(str(j)+'th qoe ', running_mean_qoe)
 
                 logger.logkv(str(j)+'th greedy run time cost', greedy_run_time)
                 logger.logkv(str(j)+'th greedy energy cost', greedy_energy)
+                logger.logkv(str(j) + 'th greedy qoe', greedy_mean_qoe)
 
-                logger.logkv(str(j)+'th all locally time cost', eval_env.all_locally_execute[0])
-                logger.logkv(str(j)+'th all locally energy cost', eval_env.all_locally_energy)
-                logger.logkv(str(j)+'th all remote time cost', eval_env.all_mec_execute[0])
-                logger.logkv(str(j)+'th all remote energy cost', eval_env.all_mec_energy)
-                logger.logkv(str(j) + 'th optimal time cost', eval_env.optimal_solution)
-                logger.logkv(str(j) + 'th optimal energy cost', eval_env.optimal_energy)
+                logger.logkv(str(j) + 'th HEFT run time cost', eval_env.heft_avg_run_time)
+                logger.logkv(str(j) + 'th HEFT energy cost', eval_env.heft_avg_energy)
+                logger.logkv(str(j) + 'th HEFT qoe', eval_env.heft_avg_qoe)
                 j += 1
 
             #logger.logkv('optimal run time cost', eval_env.optimal_solution[0])
@@ -495,6 +530,7 @@ if __name__ == "__main__":
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random10_test/random.10."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_1.calculate_heft_cost()
 
     eval_envs.append(eval_env_1)
 
@@ -502,6 +538,7 @@ if __name__ == "__main__":
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random15_test/random.15."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_2.calculate_heft_cost()
 
     eval_envs.append(eval_env_2)
 
@@ -509,13 +546,14 @@ if __name__ == "__main__":
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random20_test/random.20."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
-
+    eval_env_3.calculate_heft_cost()
     eval_envs.append(eval_env_3)
 
     eval_env_4 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random25_test/random.25."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_4.calculate_heft_cost()
 
     eval_envs.append(eval_env_4)
 
@@ -523,6 +561,7 @@ if __name__ == "__main__":
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random30_test/random.30."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_5.calculate_heft_cost()
 
     eval_envs.append(eval_env_5)
 
@@ -530,28 +569,28 @@ if __name__ == "__main__":
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random35_test/random.35."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
-
+    eval_env_6.calculate_heft_cost()
     eval_envs.append(eval_env_6)
 
     eval_env_7 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random40_test/random.40."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
-
+    eval_env_7.calculate_heft_cost()
     eval_envs.append(eval_env_7)
 
     eval_env_8 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random45_test/random.45."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
-
+    eval_env_8.calculate_heft_cost()
     eval_envs.append(eval_env_8)
 
     eval_env_9 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random50_test/random.50."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
-
+    eval_env_9.calculate_heft_cost()
     eval_envs.append(eval_env_9)
     print("Finishing initialization of environment")
 

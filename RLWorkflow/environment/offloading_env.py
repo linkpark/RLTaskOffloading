@@ -83,6 +83,9 @@ class OffloadingEnvironment(object):
         self.min_running_time_batchs = []
         self.optimal_solution = -1
         self.optimal_energy = -1
+        self.heft_avg_run_time = -1
+        self.heft_avg_energy = -1
+        self.heft_avg_qoe = -1
 
 
         for graph_file_path in graph_file_paths:
@@ -770,3 +773,32 @@ class OffloadingEnvironment(object):
             energy_batch.append(total_energy)
 
         return cost_batch, energy_batch
+
+    def calculate_qoe(self, latency_batch, energy_batch):
+        all_local_time, all_local_energy = self.get_all_locally_execute_time_batch()
+        all_local_time = np.squeeze(all_local_time)
+        all_local_energy = np.squeeze(all_local_energy)
+        latency_batch = np.squeeze(latency_batch)
+        energy_batch = np.squeeze(energy_batch)
+        qoe_batch = []
+
+        for latency, energy, single_all_local_latency, single_all_local_energy in zip(latency_batch, energy_batch,
+                                                                                      all_local_time, all_local_energy):
+            qoe = self.lambda_t * ((latency - single_all_local_latency) / single_all_local_latency) + \
+                  self.lambda_e * ((energy - single_all_local_energy) / single_all_local_energy)
+
+            qoe = -qoe
+            qoe_batch.append(qoe)
+
+        return qoe_batch
+
+    def calculate_heft_cost(self):
+        plans, finish_time_batchs = self.greedy_solution(heft=True)
+        heft_latency_batch, heft_energy_batch = self.get_running_cost_by_plan_batch(plans[0], self.task_graphs[0])
+        latency_batch = np.array(heft_latency_batch)
+        energy_batch = np.array(heft_energy_batch)
+
+        qoe_batch = self.calculate_qoe(latency_batch, energy_batch)
+        self.heft_avg_run_time = np.mean(latency_batch)
+        self.heft_avg_energy = np.mean(energy_batch)
+        self.heft_avg_qoe = np.mean(qoe_batch)
