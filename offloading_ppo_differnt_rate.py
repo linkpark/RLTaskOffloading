@@ -503,8 +503,35 @@ if __name__ == "__main__":
     lambda_t = 0.5
     lambda_e = 0.5
 
-    
+    logger.configure('./log/zhan-transrate-5Mbps', ['stdout', 'json', 'csv'])
+    resource_cluster = Resources(mec_process_capable=(8.0 * 1024 * 1024),
+                                 mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=5.0, bandwith_dl=5.0)
+
+    env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random15/random.15."],
+                                time_major=False,
+                                lambda_t=lambda_t, lambda_e=lambda_e)
+
+    eval_envs = []
+    eval_env_1 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random15_test/random.15."],
+                                time_major=False,
+                                lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_1.calculate_heft_cost()
+
+    eval_envs.append(eval_env_1)
+    print("Finishing initialization of environment")
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        mean_reward_track = learn(network="default", env=env, eval_envs=eval_envs, nsample_episode=10, nupdates=1,
+                                  max_grad_norm=1.0, noptepochs=4, gamma=0.99,
+                                  total_timesteps=80000, lr=5e-4, optbatchnumber=500)
+
+        sess.close()
+
     print("Finish testing the first case")
+    tf.reset_default_graph()
 
     logger.configure('./log/zhan-transrate-11Mbps', ['stdout', 'json', 'csv'])
     resource_cluster = Resources(mec_process_capable=(8.0 * 1024 * 1024),
