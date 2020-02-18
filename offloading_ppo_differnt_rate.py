@@ -529,10 +529,10 @@ if __name__ == "__main__":
             sess.close()
         tf.reset_default_graph()
 
-    test_case(bandwidth=5.0, log_paht='./log/zhan-transrate-5Mbps', lambda_t = 0.5, lambda_e = 0.5,nupdates=1)
-    test_case(bandwidth=11.0, log_paht='./log/zhan-transrate-11Mbps', lambda_t = 0.5, lambda_e = 0.5, nupdates=1)
-    # test_case(bandwidth=14.0, log_paht='./log/zhan-transrate-14Mbps', lambda_t=0.5, lambda_e=0.5)
-    # test_case(bandwidth=17.0, log_paht='./log/zhan-transrate-17Mbps', lambda_t=0.5, lambda_e=0.5)
+    test_case(bandwidth=5.0, log_paht='./log/zhan-transrate-5Mbps', lambda_t = 0.5, lambda_e = 0.5,nupdates=2000)
+    test_case(bandwidth=11.0, log_paht='./log/zhan-transrate-11Mbps', lambda_t = 0.5, lambda_e = 0.5, nupdates=2000)
+    test_case(bandwidth=14.0, log_paht='./log/zhan-transrate-14Mbps', lambda_t=0.5, lambda_e=0.5, nupdates=2000)
+    test_case(bandwidth=17.0, log_paht='./log/zhan-transrate-17Mbps', lambda_t=0.5, lambda_e=0.5, nupdates=2000)
 
 
 
