@@ -30,6 +30,7 @@ class Resources(object):
         self.Ptx = 1.258
 
         self.omega0 = 1.0
+        self.optimal_qoe = 0.0
 
     def up_transmission_cost(self, data, distance=0.0):
         #PLDbm = 128.1 + 37.6 * np.log10(distance / 1000.0)
@@ -178,10 +179,93 @@ class OffloadingEnvironment(object):
             task_graph_optimal_makespan_energy.append(avg_energy)
             task_graph_optimal_energys.append(avg_minimal_energy)
 
+        self.optimal_solution = task_graph_optimal_costs
+        self.optimal_energy =task_graph_optimal_energys
+        self.optimal_makespan_energy = task_graph_optimal_makespan_energy
+        print("energy consumption for optimal plan:", task_graph_optimal_makespan_energy)
+        return task_graph_optimal_costs
+
+    def calculate_optimal_qoe(self):
+        def exhaustion_plans(n):
+            plan_batch = []
+
+            for i in range(2**n):
+                plan_str = bin(i)
+                plan = []
+
+                for x in plan_str[2:]:
+                    plan.append(int(x))
+
+                while len(plan) < n:
+                    plan.insert(0, 0)
+                plan_batch.append(plan)
+            return plan_batch
+
+        n = self.task_graphs[0][0].task_number
+        plan_batch = exhaustion_plans(n)
+
+        print("exhausted plan size: ", len(plan_batch))
+
+        task_graph_optimal_costs = []
+        task_graph_optimal_energys = []
+        optimal_plan = []
+        optimal_makespan_plan_energy_cost = []
+        task_graph_optimal_makespan_energy= []
+        task_graph_optimal_qoe = []
+        optimal_plan_e = []
+        optimal_plan_qoe = []
+
+        for task_graph_batch in self.task_graphs:
+            task_graph_batch_cost = []
+            task_graph_batch_energy = []
+            task_graph_batch_qoe = []
+
+            for task_graph in task_graph_batch:
+                plans_costs = []
+                plans_energy = []
+                plans_qoe = []
+
+                all_local_time, all_local_energy = self.get_all_local_cost_for_one_graph(task_graph)
+
+                for plan in plan_batch:
+                    plan_sequence = []
+                    for action, task_id in zip(plan, task_graph.prioritize_sequence):
+                        plan_sequence.append((task_id, action))
+
+                    cost, energy, task_finish_time, energy_cost = self.get_scheduling_cost_step_by_step(plan_sequence, task_graph)
+                    plans_costs.append(task_finish_time)
+                    plans_energy.append(energy_cost)
+
+                    qoe = (self.lambda_t * (task_finish_time - all_local_time) / all_local_time) + (self.lambda_e * (energy_cost - all_local_energy) / all_local_energy)
+                    plans_qoe.append(qoe)
+
+                graph_min_cost = min(plans_costs)
+                graph_min_energy = min(plans_energy)
+                graph_min_qoe = min(plans_qoe)
+
+                optimal_plan.append(plan_batch[np.argmin(plans_costs)])
+                optimal_plan_e.append(plan_batch[np.argmin(plans_energy)])
+                optimal_makespan_plan_energy_cost.append(plans_energy[np.argmin(plans_costs)])
+                optimal_plan_qoe.append(plan_batch[np.argmin(plans_qoe)])
+
+                task_graph_batch_cost.append(graph_min_cost)
+                task_graph_batch_energy.append(graph_min_energy)
+                task_graph_batch_qoe.append(graph_min_qoe)
+
+            print("task_graph_batch cost shape is {}".format(np.array(task_graph_batch_cost).shape))
+            avg_minimal_cost = np.mean(task_graph_batch_cost)
+            avg_energy = np.mean(optimal_makespan_plan_energy_cost)
+            avg_minimal_energy = np.mean(task_graph_batch_energy)
+
+            task_graph_optimal_costs.append(avg_minimal_cost)
+            task_graph_optimal_makespan_energy.append(avg_energy)
+            task_graph_optimal_energys.append(avg_minimal_energy)
+            task_graph_optimal_qoe.append(task_graph_batch_qoe)
 
         self.optimal_solution = task_graph_optimal_costs
         self.optimal_energy =task_graph_optimal_energys
         self.optimal_makespan_energy = task_graph_optimal_makespan_energy
+        self.optimal_qoe= task_graph_optimal_qoe
         print("energy consumption for optimal plan:", task_graph_optimal_makespan_energy)
         return task_graph_optimal_costs
 
@@ -362,6 +446,36 @@ class OffloadingEnvironment(object):
 
             running_cost.append(np.mean(running_cost_batch))
             energy_cost. append(np.mean(energy_consumption_batch))
+
+        return running_cost, energy_cost
+
+    def get_all_mec_execute_time_batch(self):
+        running_cost = []
+        energy_cost = []
+
+        for task_graph_batch, encode_batch in zip(self.task_graphs, self.encoder_batchs):
+            batch_size = encode_batch.shape[0]
+            sequence_length = encode_batch.shape[1]
+
+            scheduling_action = np.ones(shape=(batch_size, sequence_length), dtype=np.int32)
+            running_cost_batch, energy_consumption_batch = self.get_running_cost(scheduling_action, task_graph_batch)
+
+            running_cost.append(running_cost_batch)
+            energy_cost.append(energy_consumption_batch)
+
+        return running_cost, energy_cost
+
+    def get_all_locally_execute_time_batch(self):
+        running_cost = []
+        energy_cost = []
+        for task_graph_batch, encode_batch in zip(self.task_graphs, self.encoder_batchs):
+            batch_size = encode_batch.shape[0]
+            sequence_length = encode_batch.shape[1]
+
+            scheduling_action = np.zeros(shape=(batch_size, sequence_length), dtype=np.int32)
+            running_cost_batch, energy_consumption_batch = self.get_running_cost(scheduling_action, task_graph_batch)
+            running_cost.append(running_cost_batch)
+            energy_cost.append(energy_consumption_batch)
 
         return running_cost, energy_cost
 
@@ -649,304 +763,10 @@ class OffloadingEnvironment(object):
         cost_batch = []
         energy_batch = []
         for plan, task_graph in zip(plan_batch, task_graph_batch):
+            self.resource_cluster.reset()
             _, _, task_finish_time, total_energy = self.get_scheduling_cost_step_by_step(plan, task_graph)
 
             cost_batch.append(task_finish_time)
             energy_batch.append(total_energy)
 
         return cost_batch, energy_batch
-
-if __name__ == "__main__":
-    # resource_cluster = Resources(mec_process_capable=(10.0*1024*1024),
-    #                              mobile_process_capable=(1.0*1024*1024),  bandwith_up=7.0, bandwith_dl=7.0)
-    #
-    # env = OffloadingEnvironment(resource_cluster = resource_cluster,
-    #                            batch_size=100,
-    #                            graph_number=100,
-    #                            graph_file_paths=["../data/offload_random10/random.10."],
-    #                            time_major=False)
-    #
-    # print("inputdim is: ", env.input_dim)
-    #
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    # print()
-    #
-    #
-    # env = OffloadingEnvironment(resource_cluster = resource_cluster,
-    #                             batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random15/random.15."],
-    #                             time_major=False)
-    #
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    # print()
-    #
-    # env = OffloadingEnvironment(resource_cluster=resource_cluster,
-    #                             batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random20/random.20."],
-    #                             time_major=False)
-    #
-    # env.calculate_optimal_solution()
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    #
-    # print("optimal makespan:", env.optimal_solution)
-    # print("optimal energy:", env.optimal_energy)
-    # print()
-    #
-    # env = OffloadingEnvironment(resource_cluster=resource_cluster,
-    #                             batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random25/random.25."],
-    #                             time_major=False)
-    #
-    # env.calculate_optimal_solution()
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    # print("optimal makespan:", env.optimal_solution)
-    # print("optimal energy:", env.optimal_energy)
-    # print()
-    #
-    # env = OffloadingEnvironment(resource_cluster=resource_cluster,
-    #                             batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random30/random.30."],
-    #                             time_major=False)
-    #
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    # print()
-    #
-    # env = OffloadingEnvironment(resource_cluster=resource_cluster,
-    #                             batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random35/random.35."],
-    #                             time_major=False)
-    #
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    # print()
-    #
-    # env = OffloadingEnvironment(resource_cluster=resource_cluster,
-    #                             batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random40/random.40."],
-    #                             time_major=False)
-    #
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    # print()
-    #
-    # env = OffloadingEnvironment(resource_cluster=resource_cluster,
-    #                             batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random45/random.45."],
-    #                             time_major=False)
-    #
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    # print()
-    #
-    # env = OffloadingEnvironment(resource_cluster=resource_cluster,
-    #                             batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random50/random.50."],
-    #                             time_major=False)
-    #
-    # running_cost, energy_cost = env.random_solution()
-    # print("random running time cost: ", running_cost)
-    # print("random energy cost: ", energy_cost)
-    #
-    # print("all locally running time cost: ", env.all_locally_execute)
-    # print("all locally energy cost: ", env.all_locally_energy)
-    #
-    # print("all mec running time cost: ", env.all_mec_execute)
-    # print("all mec energy cost: ", env.all_mec_energy)
-    # print()
-
-    # env = OffloadingEnvironment(batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random20/random.20."],
-    #                             time_major=False)
-    #
-    #
-    # env = OffloadingEnvironment(batch_size=100,
-    #                             graph_number=100,
-    #                             graph_file_paths=["../data/offload_random25/random.25."],
-    #                             time_major=False)
-
-    resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
-                                 mobile_process_capable=(1.0*1024*1024),
-                                 bandwith_up=3.0, bandwith_dl=3.0)
-
-    env = OffloadingEnvironment(resource_cluster = resource_cluster,
-                               batch_size=100,
-                               graph_number=100,
-                               graph_file_paths=["../data/offload_random15/random.15."],
-                               time_major=False)
-
-
-    plans, finish_time_batchs = env.greedy_solution()
-    cost_batch, energy_batch = env.get_running_cost_by_plan_batch(plans[0], env.task_graphs[0])
-
-    print("3.0 transmission rate")
-
-    print("optimal latency")
-    print("latency ", env.optimal_solution)
-
-    print("greedy latency and energy")
-    print("latency ", np.mean(cost_batch))
-    print("energy ", np.mean(energy_batch))
-    print()
-
-    resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
-                                 mobile_process_capable=(1.0 * 1024 * 1024),
-                                 bandwith_up=7.0, bandwith_dl=7.0)
-
-    env = OffloadingEnvironment(resource_cluster=resource_cluster,
-                                batch_size=100,
-                                graph_number=100,
-                                graph_file_paths=["../data/offload_random15/random.15."],
-                                time_major=False)
-
-    plans, finish_time_batchs = env.greedy_solution()
-    cost_batch, energy_batch = env.get_running_cost_by_plan_batch(plans[0], env.task_graphs[0])
-
-    print("7.0 transmission rate")
-
-    print("optimal latency")
-    print("latency ", env.optimal_solution)
-
-    print("greedy latency and energy")
-    print("latency ", np.mean(cost_batch))
-    print("energy ", np.mean(energy_batch))
-    print()
-
-    resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
-                                 mobile_process_capable=(1.0 * 1024 * 1024),
-                                 bandwith_up=11.0, bandwith_dl=11.0)
-
-    env = OffloadingEnvironment(resource_cluster=resource_cluster,
-                                batch_size=100,
-                                graph_number=100,
-                                graph_file_paths=["../data/offload_random15/random.15."],
-                                time_major=False)
-
-    plans, finish_time_batchs = env.greedy_solution()
-    cost_batch, energy_batch = env.get_running_cost_by_plan_batch(plans[0], env.task_graphs[0])
-
-    print("11.0 transmission rate")
-
-    print("optimal latency")
-    print("latency ", env.optimal_solution)
-
-    print("greedy latency and energy")
-    print("latency ", np.mean(cost_batch))
-    print("energy ", np.mean(energy_batch))
-    print()
-
-    resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
-                                 mobile_process_capable=(1.0 * 1024 * 1024),
-                                 bandwith_up=15.0, bandwith_dl=15.0)
-
-    env = OffloadingEnvironment(resource_cluster=resource_cluster,
-                                batch_size=100,
-                                graph_number=100,
-                                graph_file_paths=["../data/offload_random15/random.15."],
-                                time_major=False)
-
-    plans, finish_time_batchs = env.greedy_solution()
-    cost_batch, energy_batch = env.get_running_cost_by_plan_batch(plans[0], env.task_graphs[0])
-
-    print("15.0 transmission rate")
-
-    print("optimal latency")
-    print("latency ", env.optimal_solution)
-
-    print("greedy latency and energy")
-    print("latency ", np.mean(cost_batch))
-    print("energy ", np.mean(energy_batch))
-    print()
-
-    resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
-                                 mobile_process_capable=(1.0 * 1024 * 1024),
-                                 bandwith_up=19.0, bandwith_dl=19.0)
-
-    env = OffloadingEnvironment(resource_cluster=resource_cluster,
-                                batch_size=100,
-                                graph_number=100,
-                                graph_file_paths=["../data/offload_random15/random.15."],
-                                time_major=False)
-
-    plans, finish_time_batchs = env.greedy_solution()
-    cost_batch, energy_batch = env.get_running_cost_by_plan_batch(plans[0], env.task_graphs[0])
-
-    print("19.0 transmission rate")
-
-    print("optimal latency")
-    print("latency ", env.optimal_solution)
-
-    print("greedy latency and energy")
-    print("latency ", np.mean(cost_batch))
-    print("energy ", np.mean(energy_batch))
-    print()
