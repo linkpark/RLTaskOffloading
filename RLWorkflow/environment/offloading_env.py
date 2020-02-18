@@ -83,6 +83,8 @@ class OffloadingEnvironment(object):
         self.min_running_time_batchs = []
         self.optimal_solution = -1
         self.optimal_energy = -1
+        self.optimal_qoe = -1
+
         self.heft_avg_run_time = -1
         self.heft_avg_energy = -1
         self.heft_avg_qoe = -1
