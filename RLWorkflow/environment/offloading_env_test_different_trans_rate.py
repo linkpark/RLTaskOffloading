@@ -102,6 +102,8 @@ def test_case(trans_rate, graph_file_path, lambda_t = 0.5, lambda_e = 0.5):
     print()
     print("optimal qoe algorithm result: ")
     print("optimal qoe: ", np.mean(env.optimal_qoe))
+    print("optimal qoe latency: ", np.mean(env.optimal_qoe_latency))
+    print("optimal qoe energy: ", np.mean(env.optimal_qoe_energy))
 
 
 # runing the test cases:

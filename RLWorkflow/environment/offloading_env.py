@@ -89,6 +89,9 @@ class OffloadingEnvironment(object):
         self.heft_avg_energy = -1
         self.heft_avg_qoe = -1
 
+        self.optimal_qoe_energy = -1
+        self.optimal_qoe_latency = -1
+
 
         for graph_file_path in graph_file_paths:
             encoder_batchs, encoder_lengths, task_graph_batchs, decoder_full_lengths, max_running_time_batchs, min_running_time_batchs = \
@@ -217,8 +220,15 @@ class OffloadingEnvironment(object):
         optimal_makespan_plan_energy_cost = []
         task_graph_optimal_makespan_energy= []
         task_graph_optimal_qoe = []
+        task_graph_optimal_qoe_energy = []
+        task_graph_optimal_qoe_latency = []
+
         optimal_plan_e = []
         optimal_plan_qoe = []
+
+        optimal_qoe_energy = []
+        optimal_qoe_latency = []
+
 
         for task_graph_batch in self.task_graphs:
             task_graph_batch_cost = []
@@ -251,7 +261,10 @@ class OffloadingEnvironment(object):
                 optimal_plan.append(plan_batch[np.argmin(plans_costs)])
                 optimal_plan_e.append(plan_batch[np.argmin(plans_energy)])
                 optimal_makespan_plan_energy_cost.append(plans_energy[np.argmin(plans_costs)])
+
                 optimal_plan_qoe.append(plan_batch[np.argmin(plans_qoe)])
+                optimal_qoe_energy.append(plans_energy[np.argmin(plans_qoe)])
+                optimal_qoe_latency.append(plans_costs[np.argmin(plans_qoe)])
 
                 task_graph_batch_cost.append(graph_min_cost)
                 task_graph_batch_energy.append(graph_min_energy)
@@ -260,17 +273,24 @@ class OffloadingEnvironment(object):
             print("task_graph_batch cost shape is {}".format(np.array(task_graph_batch_cost).shape))
             avg_minimal_cost = np.mean(task_graph_batch_cost)
             avg_energy = np.mean(optimal_makespan_plan_energy_cost)
+            avg_qoe_energy = np.mean(optimal_qoe_energy)
+            avg_qoe_latency = np.mean(optimal_qoe_latency)
+
             avg_minimal_energy = np.mean(task_graph_batch_energy)
 
             task_graph_optimal_costs.append(avg_minimal_cost)
             task_graph_optimal_makespan_energy.append(avg_energy)
             task_graph_optimal_energys.append(avg_minimal_energy)
             task_graph_optimal_qoe.append(task_graph_batch_qoe)
+            task_graph_optimal_qoe_energy.append(avg_qoe_energy)
+            task_graph_optimal_qoe_latency.append(avg_qoe_latency)
 
         self.optimal_solution = task_graph_optimal_costs
         self.optimal_energy =task_graph_optimal_energys
         self.optimal_makespan_energy = task_graph_optimal_makespan_energy
         self.optimal_qoe= task_graph_optimal_qoe
+        self.optimal_qoe_energy = task_graph_optimal_qoe_energy
+        self.optimal_qoe_latency = task_graph_optimal_qoe_latency
         print("energy consumption for optimal plan:", task_graph_optimal_makespan_energy)
         return task_graph_optimal_costs
 

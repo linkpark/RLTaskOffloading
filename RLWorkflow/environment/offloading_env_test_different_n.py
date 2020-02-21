@@ -117,6 +117,8 @@ for graph_file_path in graph_file_pahts:
 
     print("optimal qoe algorithm result: ")
     print("optimal qoe: ", np.mean(env.optimal_qoe))
+    print("optimal qoe latency: ", np.mean(env.optimal_qoe_latency))
+    print("optimal qoe energy: ", np.mean(env.optimal_qoe_energy))
 
 
 
