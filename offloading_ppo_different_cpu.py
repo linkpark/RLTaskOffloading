@@ -500,10 +500,10 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
     return mean_reward_track
 
 if __name__ == "__main__":
-    def test_case(cpu_rate=1.0*1024 * 1024, log_paht='./log/zhan-cpu-1.0', lambda_t = 0.5, lambda_e = 0.5, nupdates=2000):
+    def test_case(cpu_rate=1.0*1024 * 1024, log_paht='./log/zhan-cpu-1.0', lambda_t = 1.0, lambda_e = 0.0, nupdates=2000):
         logger.configure(log_paht, ['stdout', 'json', 'csv'])
         resource_cluster = Resources(mec_process_capable=(cpu_rate),
-                                     mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=8.0, bandwith_dl=8.0)
+                                     mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
 
         env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
                                     graph_file_paths=["./RLWorkflow/offloading_data/offload_random15/random.15."],
@@ -529,11 +529,11 @@ if __name__ == "__main__":
             sess.close()
         tf.reset_default_graph()
 
-    test_case(cpu_rate=1.0*1024 * 1024, log_paht='./log/zhan-cpu-1.0', lambda_t = 0.5, lambda_e = 0.5,nupdates=2000)
-    test_case(cpu_rate=2.0*1024 * 1024, log_paht='./log/zhan-cpu-2.0', lambda_t = 0.5, lambda_e = 0.5, nupdates=2000)
-    test_case(cpu_rate=3.0*1024 * 1024, log_paht='./log/zhan-cpu-3.0', lambda_t=0.5, lambda_e=0.5, nupdates=2000)
-    test_case(cpu_rate=4.0*1024 * 1024, log_paht='./log/zhan-cpu-4.0', lambda_t=0.5, lambda_e=0.5, nupdates=2000)
-    test_case(cpu_rate=6.0 * 1024 * 1024, log_paht='./log/zhan-cpu-6.0', lambda_t=0.5, lambda_e=0.5, nupdates=2000)
+    test_case(cpu_rate=1.0*1024 * 1024, log_paht='./log/cpu-1.0')
+    test_case(cpu_rate=2.0*1024 * 1024, log_paht='./log/cpu-2.0')
+    test_case(cpu_rate=3.0*1024 * 1024, log_paht='./log/cpu-3.0')
+    test_case(cpu_rate=4.0*1024 * 1024, log_paht='./log/cpu-4.0')
+    test_case(cpu_rate=6.0 * 1024 * 1024, log_paht='./log/cpu-6.0')
 
 
 

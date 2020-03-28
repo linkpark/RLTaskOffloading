@@ -500,12 +500,12 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
     return mean_reward_track
 
 if __name__ == "__main__":
-    def test_case(bandwidth=5.0, log_paht='./log/zhan-transrate-5Mbps', lambda_t = 0.5, lambda_e = 0.5, nupdates=2000):
+    def test_case(bandwidth=5.0, log_paht='./log/zhan-transrate-5Mbps', lambda_t = 1.0, lambda_e = 1.0, nupdates=2000):
         logger.configure(log_paht, ['stdout', 'json', 'csv'])
-        resource_cluster = Resources(mec_process_capable=(8.0 * 1024 * 1024),
+        resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
                                      mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=bandwidth, bandwith_dl=bandwidth)
 
-        env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
+        env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=500, graph_number=500,
                                     graph_file_paths=["./RLWorkflow/offloading_data/offload_random15/random.15."],
                                     time_major=False,
                                     lambda_t=lambda_t, lambda_e=lambda_e)
@@ -529,10 +529,10 @@ if __name__ == "__main__":
             sess.close()
         tf.reset_default_graph()
 
-    test_case(bandwidth=5.0, log_paht='./log/zhan-transrate-5Mbps', lambda_t = 0.5, lambda_e = 0.5,nupdates=2000)
-    test_case(bandwidth=11.0, log_paht='./log/zhan-transrate-11Mbps', lambda_t = 0.5, lambda_e = 0.5, nupdates=2000)
-    test_case(bandwidth=14.0, log_paht='./log/zhan-transrate-14Mbps', lambda_t=0.5, lambda_e=0.5, nupdates=2000)
-    test_case(bandwidth=17.0, log_paht='./log/zhan-transrate-17Mbps', lambda_t=0.5, lambda_e=0.5, nupdates=2000)
+    test_case(bandwidth=5.0, log_paht='./log/transrate-5Mbps')
+    test_case(bandwidth=11.0, log_paht='./log/transrate-11Mbps')
+    test_case(bandwidth=14.0, log_paht='./log/transrate-14Mbps')
+    test_case(bandwidth=17.0, log_paht='./log/transrate-17Mbps')
 
 
 
