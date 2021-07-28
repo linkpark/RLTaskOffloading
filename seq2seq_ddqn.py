@@ -213,7 +213,6 @@ def ddqn_learning(env,
                   warmup_episode=10,
                   lr=1e-4,
                   batch_size=500,
-                  log_interval=1,
                   update_numbers=10,
                   load_path=None):
     sess = tf.get_default_session()
@@ -416,7 +415,7 @@ if __name__ == "__main__":
     eval_envs.append(eval_env_9)
     print("Finishing initialization of environment")
 
-    model = Seq2SeqDDQN(hparams=hparams, ob_dim=env.input_dim, gamma=0.99, max_grad_norm=0.5)
+    model = Seq2SeqDDQN(hparams=hparams, ob_dim=env.input_dim, gamma=0.99, max_grad_norm=1.0)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -428,13 +427,13 @@ if __name__ == "__main__":
                       final_epsilon=0.02,
                       train_freq=1,
                       target_freq=5,
-                      nupdates=100,
+                      nupdates=1000,
                       eval_freq=1,
-                      nsample_episode=4,
-                      lr=1e-4,
-                      batch_size=200,
-                      log_interval=1,
-                      update_numbers=4,
+                      warmup_episode=10,
+                      nsample_episode=10,
+                      lr=5e-4,
+                      batch_size=500,
+                      update_numbers=10,
                       load_path=None
                       )
 
