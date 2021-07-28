@@ -27,15 +27,6 @@ class SeqReplayBuffer(object):
             self.add(ob_seq, act_seq, dec_seq, dec_length,  greedy_act_seq, greedy_dec_seq, rew_seq, target_next_q)
 
     def add(self, ob_seq, act_seq, dec_seq, dec_length, greedy_act_seq, greedy_dec_seq, rew_seq, target_next_q):
-        ob_seq = np.array(ob_seq)
-        act_seq = np.array(act_seq)
-        dec_seq = np.array(dec_seq)
-        dec_length = np.array(dec_length)
-        greedy_act_seq = np.array(greedy_act_seq)
-        greedy_dec_seq = np.array(greedy_dec_seq)
-        rew_seq = np.array(rew_seq)
-        target_next_q = np.array(target_next_q)
-
         if self._next_idx >= len(self._observation_sequence):
             self._observation_sequence.append(ob_seq)
             self._action_sequence.append(act_seq)
@@ -52,7 +43,7 @@ class SeqReplayBuffer(object):
             self._decoder_full_length[self._next_idx] = dec_length
             self._greedy_action_sequence[self._next_idx] = greedy_act_seq
             self._greedy_decoder_input_sequence[self._next_idx] = greedy_dec_seq
-            self._reward_sequence.append[self._next_idx] = rew_seq
+            self._reward_sequence[self._next_idx] = rew_seq
             self._target_next_q[self._next_idx] = target_next_q
 
         self._next_idx = (self._next_idx + 1) % self._maxsize
@@ -74,16 +65,19 @@ class SeqReplayBuffer(object):
 
 
 if __name__ == "__main__":
-    # ob_seq = np.random.random(size=(10,20,25))
-    # ac_seq = np.random.random(size=(10,20))
-    # dec_input_seq = np.
+    ob_seq = np.random.random(size=(10,20,25))
+    ac_seq = np.random.random(size=(10,20))
+    dec_input_seq = np.random.random(size=(10,20))
+    dec_full_length = np.array([20]*10)
+    greedy_ac_seq = np.random.random(size=(10,20))
+    greedy_dec_input_seq = np.random.random(size=(10,20))
+    reward_seq = np.random.random(size=(10,20))
+    target_q_seq = np.random.random(size=(10, 20))
 
-    a = []
-    for i in range(10):
-        a.append(np.random.random(size=(10,10)))
+    replay_buffer = SeqReplayBuffer(size=10)
 
-    print(a)
+    for _ in range(100):
+        replay_buffer.add_batch(ob_seq, ac_seq, dec_input_seq,dec_full_length, greedy_ac_seq, greedy_dec_input_seq, reward_seq, target_q_seq)
 
-    a[0] = np.random.random(size=(10,10))
 
-    print(a[0])
+    print(replay_buffer.size())
