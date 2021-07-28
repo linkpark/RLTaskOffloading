@@ -300,7 +300,7 @@ if __name__ == "__main__":
     lambda_t = 1.0
     lambda_e = 0.0
 
-    logger.configure('./log/all-graph-latency-optimal', ['stdout', 'json', 'csv'])
+    logger.configure('./log/ddqn-all-graph-latency-optimal', ['stdout', 'json', 'csv'])
 
     hparams = tf.contrib.training.HParams(
         unit_type="layer_norm_lstm",
