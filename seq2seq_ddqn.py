@@ -423,7 +423,7 @@ if __name__ == "__main__":
                       eval_envs=eval_envs,
                       ddqn_model=model,
                       reply_buffer_num=9,
-                      reply_buffer_size=10000,
+                      reply_buffer_size=100000,
                       final_epsilon=0.02,
                       train_freq=1,
                       target_freq=5,
