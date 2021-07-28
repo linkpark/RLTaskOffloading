@@ -27,6 +27,15 @@ class SeqReplayBuffer(object):
             self.add(ob_seq, act_seq, dec_seq, dec_length,  greedy_act_seq, greedy_dec_seq, rew_seq, target_next_q)
 
     def add(self, ob_seq, act_seq, dec_seq, dec_length, greedy_act_seq, greedy_dec_seq, rew_seq, target_next_q):
+        ob_seq = np.array(ob_seq)
+        act_seq = np.array(act_seq)
+        dec_seq = np.array(dec_seq)
+        dec_length = np.array(dec_length)
+        greedy_act_seq = np.array(greedy_act_seq)
+        greedy_dec_seq = np.array(greedy_dec_seq)
+        rew_seq = np.array(rew_seq)
+        target_next_q = np.array(target_next_q)
+
         if self._next_idx >= len(self._observation_sequence):
             self._observation_sequence.append(ob_seq)
             self._action_sequence.append(act_seq)
@@ -64,3 +73,17 @@ class SeqReplayBuffer(object):
                np.array(self._target_next_q)[idxes]
 
 
+if __name__ == "__main__":
+    # ob_seq = np.random.random(size=(10,20,25))
+    # ac_seq = np.random.random(size=(10,20))
+    # dec_input_seq = np.
+
+    a = []
+    for i in range(10):
+        a.append(np.random.random(size=(10,10)))
+
+    print(a)
+
+    a[0] = np.random.random(size=(10,10))
+
+    print(a[0])
