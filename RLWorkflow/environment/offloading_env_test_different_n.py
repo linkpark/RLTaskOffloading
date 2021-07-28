@@ -41,8 +41,8 @@ print("lambda_t: ", lambda_t)
 print("lambda_e: ", lambda_e)
 
 for graph_file_path in graph_file_pahts:
-    resource_cluster = Resources(mec_process_capable=(8.0 * 1024 * 1024),
-                             mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=8.0, bandwith_dl=8.0)
+    resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
+                             mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
 
     env = OffloadingEnvironment(resource_cluster = resource_cluster,
                            batch_size=100,

@@ -11,7 +11,7 @@ from RLWorkflow.common.tf_util import get_session, save_variables, load_variable
 import RLWorkflow.common.tf_util as U
 from RLWorkflow.common.mpi_util import sync_from_root
 from RLWorkflow.common.console_util import fmt_row
-from RLWorkflow.offloading_ppo.seq2sq_policy import Seq2seqPolicy
+from RLWorkflow.offloading_ppo.seq2seq_policy import Seq2seqPolicy
 from RLWorkflow import logger
 
 from RLWorkflow.environment.offloading_env import OffloadingEnvironment
@@ -281,11 +281,6 @@ class Runner():
 
             actions = np.array(actions)
 
-            # print("sampel action is: ")
-            # print(actions[0])
-            # print(actions[1])
-            # print(actions[2])
-
             env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
                                                          task_graph_batch=task_graph_batch)
 
@@ -478,6 +473,7 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
 
     return mean_reward_track
 
+
 if __name__ == "__main__":
     lambda_t = 0.5
     lambda_e = 0.5
@@ -507,7 +503,7 @@ if __name__ == "__main__":
     resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
                                  mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
 
-    env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=500, graph_number=500,
+    env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=500, graph_number=500,
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random10/random.10.",
                                                   "./RLWorkflow/offloading_data/offload_random15/random.15.",
                                                   "./RLWorkflow/offloading_data/offload_random20/random.20.",
@@ -518,16 +514,17 @@ if __name__ == "__main__":
                                                   "./RLWorkflow/offloading_data/offload_random45/random.45.",
                                                   "./RLWorkflow/offloading_data/offload_random50/random.50.",
                                                   ],
-                                                  #"../data/offload_random15/random.15."],
                                 time_major=False,
-                                lambda_t=lambda_t, lambda_e=lambda_e)
+                                lambda_t=lambda_t,
+                                lambda_e=lambda_e)
 
     #env.calculate_optimal_solution()
     eval_envs = []
     eval_env_1 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random10_test/random.10."],
                                 time_major=False,
-                                lambda_t=lambda_t, lambda_e=lambda_e)
+                                lambda_t=lambda_t,
+                                lambda_e=lambda_e)
     eval_env_1.calculate_heft_cost()
 
     eval_envs.append(eval_env_1)

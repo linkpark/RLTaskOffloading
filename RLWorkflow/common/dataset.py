@@ -48,6 +48,28 @@ class Dataset(object):
         return Dataset(data_map, deterministic)
 
 
+
+class SeqReplayBuffer(object):
+    def __init__(self, data_map, deterministic=False, shuffle=True):
+        self.data_map = data_map
+        self.deterministic = deterministic
+        self.enable_shuffle = shuffle
+        self.n = len(next(iter(data_map.values())))
+        print('Dataset shape is:', self.n)
+        self._next_id = 0
+        self.shuffle()
+
+    def shuffle(self):
+        if self.deterministic:
+            return
+        perm = np.arange(self.n)
+        np.random.shuffle(perm)
+
+        for key in self.data_map:
+            self.data_map[key] = self.data_map[key][perm]
+
+        self._next_id = 0
+
 def iterbatches(arrays, *, num_batches=None, batch_size=None, shuffle=True, include_final_partial_batch=True):
     assert (num_batches is None) != (batch_size is None), 'Provide num_batches or batch_size, but not both'
     arrays = tuple(map(np.asarray, arrays))
@@ -60,40 +82,6 @@ def iterbatches(arrays, *, num_batches=None, batch_size=None, shuffle=True, incl
         if include_final_partial_batch or len(batch_inds) == batch_size:
             yield tuple(a[batch_inds] for a in arrays)
 
-
-# class Dataset(object):
-#     def __init__(self, data_map, deterministic=False, shuffle=True):
-#         self.data_map = data_map
-#         self.deterministic = deterministic
-#         self.enable_shuffle = shuffle
-#         self.n = len(next(iter(data_map.values())))
-#         print('Dataset shape is:', self.n)
-#
-#     def _build_batch_set(self, batch_size):
-#         i=0
-#         data_batchs = []
-#         while i <= self.n - batch_size:
-#             data_map = dict()
-#             for key in self.data_map:
-#                 perm = np.arange(batch_size)
-#                 np.random.shuffle(perm)
-#
-#                 data_map[key] = np.array(self.data_map[key][i:batch_size+i])
-#                 data_map[key] = data_map[key][perm]
-#
-#             data_batchs.append(data_map)
-#
-#             i = batch_size + i
-#
-#         return data_batchs
-#
-#     def iterate_once(self, batch_size):
-#         data_batchs = self._build_batch_set(batch_size)
-#         batch_index = np.arange(len(data_batchs))
-#         np.random.shuffle(batch_index)
-#
-#         for index in batch_index:
-#             yield data_batchs[index]
 
 
 if __name__ == "__main__":
