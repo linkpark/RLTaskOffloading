@@ -20,7 +20,6 @@ from RLWorkflow.environment.offloading_env import Resources
 from RLWorkflow.common.dataset import Dataset
 from RLWorkflow.common.misc_util import zipsame
 
-logger.configure('./log/offloading_ppo_meccpu_4.0_energy', ['stdout', 'json', 'csv'])
 
 hparams = tf.contrib.training.HParams(
         unit_type="lstm",
@@ -286,11 +285,6 @@ class Runner():
 
             actions = np.array(actions)
 
-            # print("sampel action is: ")
-            # print(actions[0])
-            # print(actions[1])
-            # print(actions[2])
-
             env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
                                                          task_graph_batch=task_graph_batch)
 
@@ -311,12 +305,11 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
           log_interval=1, nminibatches=4, noptepochs=4, cliprange=0.2,
           save_interval=0, load_path=None, **network_kwargs):
 
-    #policy = build_policy(env, network, hparameters=hparams)
-
     ob = tf.placeholder(dtype=tf.float32, shape=[None, None, env.input_dim])
     ob_length = tf.placeholder(dtype=tf.int32, shape=[None])
 
-    make_model = lambda: S2SModel_Back(ob=ob, ob_length=ob_length, ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm)
+    make_model = lambda: S2SModel_Back(ob=ob, ob_length=ob_length,
+                                       ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm)
 
     model = make_model()
     if load_path is not None:
