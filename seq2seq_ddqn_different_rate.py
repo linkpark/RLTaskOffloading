@@ -155,7 +155,7 @@ class Runner(object):
                 greedy_decoder_input =  np.column_stack(
                     (np.ones(greedy_actions.shape[0], dtype=np.int32) * self.env.start_symbol, sample_actions[:, 0:-1]))
 
-                target_next_q = model.target_q_net.get_qvalues(encoder_input_batch=encoder_batch,
+                target_next_q = self.model.target_q_net.get_qvalues(encoder_input_batch=encoder_batch,
                                                                decoder_input=greedy_decoder_input,
                                                                decoder_full_length=decoder_lengths,
                                                                decoder_target=greedy_actions)
@@ -242,7 +242,7 @@ def ddqn_learning(env,
         print("sample time cost: ", (sample_time_cost - tstart))
 
         if update % train_freq == 0:
-            logger.log(fmt_row(13, model.loss_names))
+            logger.log(fmt_row(13, ddqn_model.loss_names))
             for _ in range(update_numbers):
                 batch_losses = []
                 for replay_buffer in replay_buffers:
@@ -263,11 +263,11 @@ def ddqn_learning(env,
         # sychronous the parameters between target q net and q net.
         if update % target_freq == 0:
             print("Update target q network")
-            model.update_target_q()
+            ddqn_model.update_target_q()
 
         if update % eval_freq == 0:
             # add the
-            model.save("./checkpoint/ddqn_offloading_model.ckpt")
+            ddqn_model.save("./checkpoint/ddqn_offloading_model.ckpt")
             running_cost = []
             energy_consumption = []
             running_qoe = []
@@ -345,9 +345,8 @@ if __name__ == "__main__":
         eval_envs.append(eval_env_1)
         print("Finishing initialization of environment")
 
-        model = Seq2SeqDDQN(hparams=hparams, ob_dim=env.input_dim, gamma=0.99, max_grad_norm=1.0)
-
         with tf.Session() as sess:
+            model = Seq2SeqDDQN(hparams=hparams, ob_dim=env.input_dim, gamma=0.99, max_grad_norm=1.0)
             sess.run(tf.global_variables_initializer())
             ddqn_learning(env=env,
                           eval_envs=eval_envs,

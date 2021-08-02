@@ -242,7 +242,7 @@ def ddqn_learning(env,
         print("sample time cost: ", (sample_time_cost - tstart))
 
         if update % train_freq == 0:
-            logger.log(fmt_row(13, model.loss_names))
+            logger.log(fmt_row(13, ddqn_model.loss_names))
             for _ in range(update_numbers):
                 batch_losses = []
                 for replay_buffer in replay_buffers:
@@ -263,11 +263,11 @@ def ddqn_learning(env,
         # sychronous the parameters between target q net and q net.
         if update % target_freq == 0:
             print("Update target q network")
-            model.update_target_q()
+            ddqn_model.update_target_q()
 
         if update % eval_freq == 0:
             # add the
-            model.save("./checkpoint/ddqn_offloading_model.ckpt")
+            ddqn_model.save("./checkpoint/ddqn_offloading_model.ckpt")
             running_cost = []
             energy_consumption = []
             running_qoe = []
