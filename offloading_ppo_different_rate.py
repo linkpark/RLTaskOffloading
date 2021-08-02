@@ -500,7 +500,7 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
     return mean_reward_track
 
 if __name__ == "__main__":
-    def test_case(bandwidth=5.0, log_paht='./log/zhan-transrate-5Mbps', lambda_t = 1.0, lambda_e = 1.0, nupdates=2000):
+    def test_case(bandwidth=5.0, log_paht='./log/zhan-transrate-5Mbps', lambda_t = 1.0, lambda_e = 1.0, nupdates=1000):
         logger.configure(log_paht, ['stdout', 'json', 'csv'])
         resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
                                      mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=bandwidth, bandwith_dl=bandwidth)
@@ -529,10 +529,11 @@ if __name__ == "__main__":
             sess.close()
         tf.reset_default_graph()
 
-    test_case(bandwidth=5.0, log_paht='./log/transrate-5Mbps')
+    test_case(bandwidth=3.0, log_paht='./log/transrate-3Mbps')
+    test_case(bandwidth=7.0, log_paht='./log/transrate-7Mbps')
     test_case(bandwidth=11.0, log_paht='./log/transrate-11Mbps')
-    test_case(bandwidth=14.0, log_paht='./log/transrate-14Mbps')
-    test_case(bandwidth=17.0, log_paht='./log/transrate-17Mbps')
+    test_case(bandwidth=15.0, log_paht='./log/transrate-14Mbps')
+    test_case(bandwidth=19.0, log_paht='./log/transrate-17Mbps')
 
 
 
