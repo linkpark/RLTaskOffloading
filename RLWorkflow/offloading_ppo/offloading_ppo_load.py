@@ -10,8 +10,8 @@ lam=0.95
 ent_coef=0.01
 vf_coef=0.5
 max_grad_norm=0.5
-load_path = "./checkpoint/model.ckpt"
-
+# load_path = "./checkpoint/model.ckpt"
+load_path = None
 
 resource_cluster = Resources(mec_process_capable=(10.0*1024*1024),
                                  mobile_process_capable=(1.0*1024*1024),  bandwith_up=3.0, bandwith_dl=3.0)
@@ -19,7 +19,7 @@ resource_cluster = Resources(mec_process_capable=(10.0*1024*1024),
 env = OffloadingEnvironment(resource_cluster = resource_cluster,
                            batch_size=100,
                            graph_number=100,
-                           graph_file_paths=["../data/offload_random15/random.15."],
+                           graph_file_paths=["../offloading_data/offload_random15_test/random.15."],
                            time_major=False)
 
 ob = tf.placeholder(dtype=tf.float32, shape=[None, None, env.input_dim])
@@ -27,7 +27,7 @@ ob_length = tf.placeholder(dtype=tf.int32, shape=[None])
 
 make_model = lambda: S2SModel_Back(ob=ob, ob_length=ob_length, ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm)
 model = make_model()
-model.load(load_path)
+# model.load(load_path)
 
 eval_runner = Runner(env=env, model=model, nepisode=1, gamma=gamma, lam=lam)
 

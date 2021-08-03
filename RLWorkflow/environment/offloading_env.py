@@ -73,7 +73,7 @@ class Resources(object):
 
 
 class OffloadingEnvironment(object):
-    def __init__(self, resource_cluster, batch_size, graph_number, graph_file_paths, time_major, lambda_t=1.0, lambda_e=0.0):
+    def __init__(self, resource_cluster, batch_size, graph_number, graph_file_paths, time_major, lambda_t=1.0, lambda_e=0.0, encode_dependencies=True):
         self.resource_cluster = resource_cluster
         self.task_graphs = []
         self.encoder_batchs = []
@@ -91,6 +91,7 @@ class OffloadingEnvironment(object):
 
         self.optimal_qoe_energy = -1
         self.optimal_qoe_latency = -1
+        self.encode_dependencies = encode_dependencies
 
 
         for graph_file_path in graph_file_paths:
@@ -543,7 +544,8 @@ class OffloadingEnvironment(object):
             scheduling_sequence = task_graph.prioritize_tasks(self.resource_cluster)
 
             task_encode = np.array(task_graph.encode_point_sequence_with_ranking_and_cost(scheduling_sequence,
-                                                                                          self.resource_cluster))
+                                                                                          self.resource_cluster,
+                                                                                          encode_dependencies=self.encode_dependencies))
             encoder_list.append(task_encode)
 
         for i in range(int(graph_number / batch_size)):

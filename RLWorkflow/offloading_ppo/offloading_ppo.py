@@ -260,10 +260,12 @@ class Runner():
         for encoder_batch, encoder_length, decoder_lengths, task_graph_batch \
                                                             in zip(self.env.encoder_batchs, self.env.encoder_lengths,
                                                                   self.env.decoder_full_lengths, self.env.task_graphs):
-
+            begin_time = time.time()
             actions, values, neglogpacs = self.model.step(encoder_input_batch=encoder_batch,
                                                           decoder_full_length=decoder_lengths,
                                                           encoder_lengths=encoder_length)
+            end_time =time.time()
+            print("inference time cost: ", end_time - begin_time)
             actions = np.array(actions)
             env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
                                                          task_graph_batch=task_graph_batch)

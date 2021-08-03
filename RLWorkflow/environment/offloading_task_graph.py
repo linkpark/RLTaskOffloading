@@ -25,11 +25,13 @@ class OffloadingDotParser(object):
     def __init__(self, file_name, is_matrix):
         self.succ_task_for_ids = {}
         self.pre_task_for_ids = {}
+        self.is_matrix = is_matrix
 
         self.dot_ob = pydotplus.graphviz.graph_from_dot_file(file_name)
         self._parse_task()
         self._parse_dependecies()
         self._calculate_depth_and_transimission_datasize()
+
 
     def _parse_task(self):
         jobs = self.dot_ob.get_node_list()
@@ -164,7 +166,7 @@ class OffloadingTaskGraph(object):
         self.edge_set.append(edge)
 
     # TODO: change the encode point sequence to cost time
-    def encode_point_sequence(self):
+    def encode_point_sequence(self, encode_dependencies=True):
         point_sequence = []
         for i in range(self.task_number):
             norm_processing_data_size = self.norm_feature(self.task_list[i].processing_data_size)
@@ -192,13 +194,17 @@ class OffloadingTaskGraph(object):
             succs_task_index_set = succs_task_index_set[0:6]
             pre_task_index_set = pre_task_index_set[0:6]
 
-            point_vector = norm_data_size_list + pre_task_index_set + succs_task_index_set
+            if encode_dependencies:
+                point_vector = norm_data_size_list + pre_task_index_set + succs_task_index_set
+            else:
+                point_vector = norm_data_size_list
+
             point_sequence.append(point_vector)
 
         return point_sequence
 
-    def encode_point_sequence_with_ranking(self, sorted_task):
-        point_sequence = self.encode_point_sequence()
+    def encode_point_sequence_with_ranking(self, sorted_task, encode_dependencies=True):
+        point_sequence = self.encode_point_sequence(encode_dependencies=encode_dependencies)
 
         prioritize_point_sequence = []
         for task_id in sorted_task:
@@ -206,7 +212,7 @@ class OffloadingTaskGraph(object):
 
         return prioritize_point_sequence
 
-    def encode_point_sequence_with_cost(self, resource_cluster):
+    def encode_point_sequence_with_cost(self, resource_cluster, encode_dependencies=True):
         point_sequence = []
         for i in range(self.task_number):
             task = self.task_list[i]
@@ -238,14 +244,18 @@ class OffloadingTaskGraph(object):
             succs_task_index_set = succs_task_index_set[0:6]
             pre_task_index_set = pre_task_index_set[0:6]
 
-            point_vector = task_embeding_vector + pre_task_index_set + succs_task_index_set
+            if encode_dependencies:
+                point_vector = task_embeding_vector + pre_task_index_set + succs_task_index_set
+            else:
+                point_vector = task_embeding_vector
+
             point_sequence.append(point_vector)
 
         return point_sequence
 
 
-    def encode_point_sequence_with_ranking_and_cost(self, sorted_task, resource_cluster):
-        point_sequence = self.encode_point_sequence_with_cost(resource_cluster)
+    def encode_point_sequence_with_ranking_and_cost(self, sorted_task, resource_cluster, encode_dependencies=True):
+        point_sequence = self.encode_point_sequence_with_cost(resource_cluster, encode_dependencies=encode_dependencies)
 
         prioritize_point_sequence = []
         for task_id in sorted_task:
