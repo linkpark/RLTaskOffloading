@@ -297,11 +297,11 @@ def ddqn_learning(env,
             logger.dumpkvs()
 
 if __name__ == "__main__":
-    lambda_t = 1.0
-    lambda_e = 0.0
+    # lambda_t = 1.0
+    # lambda_e = 0.0
 
-    # lambda_t = 0.5
-    # lambda_e = 0.5
+    lambda_t = 0.5
+    lambda_e = 0.5
 
     hparams = tf.contrib.training.HParams(
         unit_type="layer_norm_lstm",
@@ -369,11 +369,14 @@ if __name__ == "__main__":
 
         tf.reset_default_graph()
 
-    test_case(bandwidth=3.0, lambda_t=1.0, lambda_e=0.0, log_path='./log/ddqn-lo-transrate-3Mbps')
-    test_case(bandwidth=7.0, lambda_t=1.0, lambda_e=0.0, log_path='./log/ddqn-lo-transrate-7Mbps')
-    test_case(bandwidth=11.0, lambda_t=1.0, lambda_e=0.0, log_path='./log/ddqn-lo-transrate-11Mbps')
-    test_case(bandwidth=15.0, lambda_t=1.0, lambda_e=0.0, log_path='./log/ddqn-lo-transrate-14Mbps')
-    test_case(bandwidth=19.0, lambda_t=1.0, lambda_e=0.0, log_path='./log/ddqn-lo-transrate-17Mbps')
+    # log_path = './log/ddqn-lo-transrate'
+    log_path = './log/ddqn-ee-transrate'
+
+    test_case(bandwidth=3.0, lambda_t=lambda_t, lambda_e=lambda_e, log_path=log_path+'-3Mbps')
+    test_case(bandwidth=7.0, lambda_t=lambda_t, lambda_e=lambda_e, log_path=log_path+'-7Mbps')
+    test_case(bandwidth=11.0, lambda_t=lambda_t, lambda_e=lambda_e, log_path=log_path+'-11Mbps')
+    test_case(bandwidth=15.0, lambda_t=lambda_t, lambda_e=lambda_e, log_path=log_path+'-14Mbps')
+    test_case(bandwidth=19.0, lambda_t=lambda_t, lambda_e=lambda_e, log_path=log_path+'-17Mbps')
 
 
 
