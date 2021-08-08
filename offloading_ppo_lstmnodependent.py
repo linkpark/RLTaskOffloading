@@ -565,7 +565,7 @@ if __name__ == "__main__":
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        mean_reward_track = learn(network="default", env=env, eval_envs=eval_envs, nsample_episode=10, nupdates=3000,
+        mean_reward_track = learn(network="default",  env=env, hparams=hparams,eval_envs=eval_envs, nsample_episode=10, nupdates=3000,
                                   max_grad_norm=1.0, noptepochs=4, gamma=0.99,
                                   total_timesteps=80000, lr=5e-4, optbatchnumber=500)
 
