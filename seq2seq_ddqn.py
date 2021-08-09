@@ -432,7 +432,7 @@ if __name__ == "__main__":
                       final_epsilon=0.02,
                       train_freq=1,
                       target_freq=5,
-                      nupdates=1000,
+                      nupdates=3000,
                       eval_freq=1,
                       warmup_episode=10,
                       nsample_episode=10,

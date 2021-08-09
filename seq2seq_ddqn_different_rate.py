@@ -323,7 +323,7 @@ if __name__ == "__main__":
         is_bidencoder=True
     )
 
-    def test_case(bandwidth=5.0, log_path='./log', lambda_t=1.0, lambda_e=0.0, nupdates=1000):
+    def test_case(bandwidth=5.0, log_path='./log', lambda_t=1.0, lambda_e=0.0, nupdates=2000):
         logger.configure(log_path, ['stdout', 'json', 'csv'])
         resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
                                      mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=bandwidth,
