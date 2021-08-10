@@ -429,7 +429,7 @@ if __name__ == "__main__":
                       ddqn_model=model,
                       reply_buffer_num=9,
                       reply_buffer_size=100000,
-                      final_epsilon=0.02,
+                      final_epsilon=0.01,
                       train_freq=1,
                       target_freq=5,
                       nupdates=3000,
