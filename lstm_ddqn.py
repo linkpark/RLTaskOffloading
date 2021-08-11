@@ -1,0 +1,421 @@
+import tensorflow as tf
+import numpy as np
+import itertools
+import functools
+import time
+
+from mpi4py import MPI
+
+from RLWorkflow.common.mpi_adam_optimizer import MpiAdamOptimizer
+from RLWorkflow.common.tf_util import get_session, save_variables, load_variables, initialize
+import RLWorkflow.common.tf_util as U
+from RLWorkflow.common.mpi_util import sync_from_root
+from RLWorkflow.common.schedule import LinearSchedule
+from RLWorkflow.common.console_util import fmt_row
+from RLWorkflow.offloading_ddqn.lstm_dqnet import LSTMDuelQnet
+from RLWorkflow import logger
+
+from RLWorkflow.environment.offloading_env import OffloadingEnvironment
+from RLWorkflow.environment.offloading_env import Resources
+
+from RLWorkflow.common.misc_util import zipsame
+from RLWorkflow.offloading_ddqn.seq2seq_replay_buffer import SeqReplayBuffer
+
+def calculate_qoe(latency_batch, energy_batch, env):
+    all_local_time, all_local_energy = env.get_all_locally_execute_time_batch()
+    all_local_time = np.squeeze(all_local_time)
+    all_local_energy = np.squeeze(all_local_energy)
+    latency_batch = np.squeeze(latency_batch)
+    energy_batch = np.squeeze(energy_batch)
+    qoe_batch = []
+
+    for latency, energy, single_all_local_latency, single_all_local_energy in zip(latency_batch, energy_batch, all_local_time, all_local_energy):
+        qoe = env.lambda_t * ((latency - single_all_local_latency) / single_all_local_latency) + \
+              env.lambda_e * ((energy - single_all_local_energy) / single_all_local_energy)
+
+        qoe = -qoe
+        qoe_batch.append(qoe)
+
+    return qoe_batch
+
+# LSTM + DuelQnets + Double Deep Q-learning
+class LSTMDDQN(object):
+    def __init__(self, hparams, ob_dim, gamma, max_grad_norm):
+        # placeholder for qnet
+        self.ob_input = tf.placeholder(dtype=tf.float32, shape=[None, None, ob_dim])
+
+        self.action = tf.placeholder(tf.int32, [None, None])
+        # placeholder for target q net
+        self.target_ob_input = tf.placeholder(dtype=tf.float32, shape=[None, None, ob_dim])
+        self.target_next_q = tf.placeholder(tf.float32, [None, None])
+        self.target_action = tf.placeholder(tf.int32, [None, None])
+
+        # sequential reward
+        self.r = tf.placeholder(tf.float32, [None, None])
+        self.lr = tf.placeholder(tf.float32, [])
+
+        self.q_net = LSTMDuelQnet("qnet", hparams, reuse=True,
+                            encoder_inputs=self.ob_input, actions=self.action
+                            )
+
+        self.target_q_net = LSTMDuelQnet("target_qnet", hparams, reuse=False,
+                            encoder_inputs=self.target_ob_input, actions=self.target_action)
+
+        self.update_target_q = U.function([], [], updates=[tf.assign(oldv, newv)
+                                                        for (oldv, newv) in
+                                                        zipsame(self.target_q_net.get_trainable_variables(),
+                                                                self.q_net.get_trainable_variables())])
+        # define loss function here:
+        # target q-network evaluation, this q value is estimiated by double deep q learning
+
+        # define the double the loss function of double dqn
+        q_selected_target = self.r + gamma * tf.stop_gradient(self.target_next_q)
+        td_error = self.q_net.q - q_selected_target
+        self.q_loss = tf.reduce_mean(U.huber_loss(td_error))
+
+        params = self.q_net.get_trainable_variables()
+        trainer = MpiAdamOptimizer(MPI.COMM_WORLD, learning_rate=self.lr, epsilon=1e-5)
+
+        grads_and_var = trainer.compute_gradients(self.q_loss, params)
+        grads, var = zip(*grads_and_var)
+
+        # clip the gradients
+        if max_grad_norm is not None:
+            grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+
+        grads_and_var = list(zip(grads, var))
+        self._train = trainer.apply_gradients(grads_and_var)
+
+        self.loss_names = ["q_loss"]
+        self.step = self.q_net.step
+
+    def train(self, sess, learning_rate, obs, rewards, actions,
+              target_next_q_values):
+
+        td_map = {self.lr: learning_rate,
+                  self.ob_input: obs,
+                  self.r: rewards,
+                  self.action: actions,
+                  self.target_next_q: target_next_q_values}
+
+        return sess.run([self.q_loss, self._train], td_map)
+
+    def save(self, model_path):
+        sess = tf.get_default_session()
+        functools.partial(save_variables, sess=sess)(model_path)
+
+    def load(self, model_path):
+        sess = tf.get_default_session()
+        functools.partial(load_variables, sess=sess)(model_path)
+
+class Runner(object):
+    def __init__(self, env, model, nepisode, replay_buffers):
+        self.env = env
+        self.model = model
+        self.nepisode = nepisode
+        self.replay_buffers = replay_buffers
+
+    def run(self, epsilon_threshold=0.1):
+        assert self.replay_buffers is not None
+
+        for task_graph_batch, encoder_batch, encoder_length, \
+            decoder_lengths, max_running_time, min_running_time, replay_buffer in zip(self.env.task_graphs,
+                                                                       self.env.encoder_batchs,
+                                                                       self.env.encoder_lengths,
+                                                                       self.env.decoder_full_lengths,
+                                                                       self.env.max_running_time_batchs,
+                                                                       self.env.min_running_time_batchs,
+                                                                       self.replay_buffers):
+            for _ in range(self.nepisode):
+                sample_actions, greedy_actions = self.model.step(obs=encoder_batch,
+                                                                 epsilon_threshold=epsilon_threshold)
+
+                sample_decoder_input = np.column_stack(
+                    (np.ones(sample_actions.shape[0], dtype=np.int32) * self.env.start_symbol, sample_actions[:, 0:-1]))
+
+                greedy_decoder_input =  np.column_stack(
+                    (np.ones(greedy_actions.shape[0], dtype=np.int32) * self.env.start_symbol, sample_actions[:, 0:-1]))
+
+                target_next_q = self.model.target_q_net.get_qvalues(encoder_input_batch=encoder_batch,
+                                                                    actions=greedy_actions)
+
+                # get Q(S_{t+1}, argmax_{a}Q(S_{t+1}, a; \theta_t), \theta_t^-).
+                target_next_q = np.column_stack(
+                    (target_next_q[:, 1:], np.zeros(greedy_actions.shape[0], dtype=np.int32)))
+
+                rewards = self.env.step(task_graph_batch=task_graph_batch, action_sequence_batch=sample_actions,
+                                        max_running_time_batch=max_running_time,
+                                        min_running_time_batch=min_running_time)
+
+                replay_buffer.add_batch(batch_ob_seq=encoder_batch,
+                                        batch_act_seq=sample_actions,
+                                        batch_dec_seq= sample_decoder_input,
+                                        batch_dec_length = decoder_lengths,
+                                        batch_greedy_act_seq=greedy_actions,
+                                        batch_greedy_dec_seq=greedy_decoder_input,
+                                        batch_rew_seq=rewards,
+                                        batch_target_next_q=target_next_q)
+
+    def evaluate(self):
+        running_cost = []
+        energy_consumption = []
+        running_qoe = []
+
+        for encoder_batch, encoder_length, decoder_lengths, task_graph_batch \
+                in zip(self.env.encoder_batchs, self.env.encoder_lengths,
+                       self.env.decoder_full_lengths, self.env.task_graphs):
+            _, actions = self.model.step(obs=encoder_batch)
+            actions = np.array(actions)
+            env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
+                                                                                 task_graph_batch=task_graph_batch)
+
+            qoe = calculate_qoe(env_running_cost, env_energy_consumption, self.env)
+
+            running_cost += env_running_cost
+            energy_consumption += env_energy_consumption
+            running_qoe += qoe
+
+        return running_cost, energy_consumption, running_qoe
+
+def ddqn_learning(env,
+                  ddqn_model,
+                  reply_buffer_num=9,
+                  reply_buffer_size=10000,
+                  eval_envs=None,
+                  final_epsilon=0.02,
+                  train_freq = 1,
+                  target_freq = 10,
+                  eval_freq = 10,
+                  nupdates=1000,
+                  nsample_episode=10,
+                  warmup_episode=10,
+                  lr=1e-4,
+                  batch_size=500,
+                  log_interval=1,
+                  update_numbers=10,
+                  load_path=None):
+    sess = tf.get_default_session()
+
+    replay_buffers = []
+    for _ in range(reply_buffer_num):
+        replay_buffers.append(SeqReplayBuffer(size=reply_buffer_size))
+
+    runner = Runner(model=ddqn_model, env=env, nepisode=nsample_episode, replay_buffers=replay_buffers)
+
+    eval_runners = []
+    if eval_envs is not None:
+        for eval_env in eval_envs:
+            eval_runners.append(Runner(model=ddqn_model, env=eval_env, nepisode=1, replay_buffers=None))
+
+    exploration = LinearSchedule(schedule_timesteps=nupdates//2, final_p=final_epsilon, initial_p=1.0)
+    # warm up period
+    for _ in range(warmup_episode):
+        runner.run(epsilon_threshold=1.0)
+
+    for update in range(1, nupdates+1):
+        tstart = time.time()
+
+        # sample trajectories from the envrionment
+        runner.run(exploration.value(update))
+        sample_time_cost = time.time()
+        print("sample time cost: ", (sample_time_cost - tstart))
+
+        if update % train_freq == 0:
+            logger.log(fmt_row(13, ddqn_model.loss_names))
+            for _ in range(update_numbers):
+                batch_losses = []
+                for replay_buffer in replay_buffers:
+                    ob_seq, ac_seq, dec_input_seq, decoder_full_length, greedy_ac_seq, \
+                    greedy_dec_input_seq, rew_seq, target_next_q = replay_buffer.random_sample(batch_size)
+
+                    q_loss, _ = ddqn_model.train(sess, learning_rate=lr, obs=ob_seq,
+                                  rewards=rew_seq,
+                                  target_next_q_values=target_next_q,
+                                  actions=ac_seq)
+
+                    batch_losses.append(q_loss)
+
+                logger.log(fmt_row(13, [np.mean(batch_losses, axis=0)]))
+        update_time_cost = time.time()
+        print("Update time cost: ", (update_time_cost - sample_time_cost))
+
+        # sychronous the parameters between target q net and q net.
+        if update % target_freq == 0:
+            print("Update target q network")
+            ddqn_model.update_target_q()
+
+        if update % eval_freq == 0:
+            # add the
+            ddqn_model.save("./checkpoint/ddqn_offloading_model.ckpt")
+            running_cost = []
+            energy_consumption = []
+            running_qoe = []
+            #
+            for eval_runner in eval_runners:
+                Tc, Ec, qoe = eval_runner.evaluate()
+
+                running_cost.append(np.mean(Tc))
+                energy_consumption.append(np.mean(Ec))
+                running_qoe.append(np.mean(qoe))
+
+            j = 0
+            for eval_env, run_time, energy, running_mean_qoe in zip(
+                    eval_envs, running_cost,
+                    energy_consumption,
+                    running_qoe):
+                logger.logkv(str(j) + 'th run time cost ', run_time)
+                logger.logkv(str(j) + 'th energy cost ', energy)
+                logger.logkv(str(j) + 'th qoe ', running_mean_qoe)
+
+                logger.logkv(str(j) + 'th HEFT run time cost', eval_env.heft_avg_run_time)
+                logger.logkv(str(j) + 'th HEFT energy cost', eval_env.heft_avg_energy)
+                logger.logkv(str(j) + 'th HEFT qoe', eval_env.heft_avg_qoe)
+                j += 1
+
+        if MPI.COMM_WORLD.Get_rank() == 0:
+            logger.dumpkvs()
+
+if __name__ == "__main__":
+    # lambda_t = 1.0
+    # lambda_e = 0.0
+
+    lambda_t = 0.5
+    lambda_e = 0.5
+
+    # logger.configure('./log/ddqn-all-graph-latency-optimal', ['stdout', 'json', 'csv'])
+    logger.configure('./log/ddqn-all-graph-energy-efficient', ['stdout', 'json', 'csv'])
+
+    hparams = tf.contrib.training.HParams(
+        unit_type="layer_norm_lstm",
+        num_units=256,
+        learning_rate=0.00005,
+        supervised_learning_rate=0.00005,
+        n_features=2,
+        time_major=False,
+        is_attention=True,
+        forget_bias=1.0,
+        dropout=0,
+        num_gpus=1,
+        num_layers=2,
+        num_residual_layers=0,
+        is_greedy=False,
+        inference_model="sample",
+        start_token=0,
+        end_token=5,
+        is_bidencoder=True
+    )
+
+    resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
+                                 mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
+
+    env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=500, graph_number=500,
+                                graph_file_paths=["./RLWorkflow/offloading_data/offload_random10/random.10.",
+                                                  "./RLWorkflow/offloading_data/offload_random15/random.15.",
+                                                  "./RLWorkflow/offloading_data/offload_random20/random.20.",
+                                                  "./RLWorkflow/offloading_data/offload_random25/random.25.",
+                                                  "./RLWorkflow/offloading_data/offload_random30/random.30.",
+                                                  "./RLWorkflow/offloading_data/offload_random35/random.35.",
+                                                  "./RLWorkflow/offloading_data/offload_random40/random.40.",
+                                                  "./RLWorkflow/offloading_data/offload_random45/random.45.",
+                                                  "./RLWorkflow/offloading_data/offload_random50/random.50.",
+                                                  ],
+                                time_major=False,
+                                lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_envs = []
+    eval_env_1 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random10_test/random.10."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_1.calculate_heft_cost()
+    eval_envs.append(eval_env_1)
+
+    eval_env_2 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random15_test/random.15."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_2.calculate_heft_cost()
+
+    eval_envs.append(eval_env_2)
+
+    eval_env_3 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random20_test/random.20."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_3.calculate_heft_cost()
+    eval_envs.append(eval_env_3)
+
+    eval_env_4 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random25_test/random.25."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_4.calculate_heft_cost()
+
+    eval_envs.append(eval_env_4)
+
+    eval_env_5 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random30_test/random.30."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_5.calculate_heft_cost()
+
+    eval_envs.append(eval_env_5)
+
+    eval_env_6 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random35_test/random.35."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_6.calculate_heft_cost()
+    eval_envs.append(eval_env_6)
+
+    eval_env_7 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random40_test/random.40."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_7.calculate_heft_cost()
+    eval_envs.append(eval_env_7)
+
+    eval_env_8 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random45_test/random.45."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_8.calculate_heft_cost()
+    eval_envs.append(eval_env_8)
+
+    eval_env_9 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                       graph_file_paths=[
+                                           "./RLWorkflow/offloading_data/offload_random50_test/random.50."],
+                                       time_major=False,
+                                       lambda_t=lambda_t, lambda_e=lambda_e)
+    eval_env_9.calculate_heft_cost()
+    eval_envs.append(eval_env_9)
+    print("Finishing initialization of environment")
+
+    model = LSTMDDQN(hparams=hparams, ob_dim=env.input_dim, gamma=0.99, max_grad_norm=1.0)
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        ddqn_learning(env=env,
+                      eval_envs=eval_envs,
+                      ddqn_model=model,
+                      reply_buffer_num=9,
+                      reply_buffer_size=100000,
+                      final_epsilon=0.01,
+                      train_freq=1,
+                      target_freq=5,
+                      nupdates=3000,
+                      eval_freq=1,
+                      warmup_episode=10,
+                      nsample_episode=10,
+                      lr=5e-4,
+                      batch_size=500,
+                      update_numbers=10,
+                      load_path=None
+                      )
