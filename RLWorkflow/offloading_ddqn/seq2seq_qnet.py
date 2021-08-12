@@ -371,7 +371,6 @@ class Seq2seqQNet(object):
         return q_values
 
 
-
 if __name__ == "__main__":
     hparams = tf.contrib.training.HParams(
         unit_type="layer_norm_lstm",

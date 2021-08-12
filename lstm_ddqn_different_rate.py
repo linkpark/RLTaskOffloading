@@ -312,14 +312,18 @@ if __name__ == "__main__":
         env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=500, graph_number=500,
                                     graph_file_paths=["./RLWorkflow/offloading_data/offload_random15/random.15."],
                                     time_major=False,
-                                    lambda_t=lambda_t, lambda_e=lambda_e)
+                                    lambda_t=lambda_t, lambda_e=lambda_e,
+                                    encode_dependencies=False
+                                    )
 
         eval_envs = []
         eval_env_1 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
                                            graph_file_paths=[
                                                "./RLWorkflow/offloading_data/offload_random15_test/random.15."],
                                            time_major=False,
-                                           lambda_t=lambda_t, lambda_e=lambda_e)
+                                           lambda_t=lambda_t, lambda_e=lambda_e,
+                                           encode_dependencies=False
+                                           )
         eval_env_1.calculate_heft_cost()
 
         eval_envs.append(eval_env_1)

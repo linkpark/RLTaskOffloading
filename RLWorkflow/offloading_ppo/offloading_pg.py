@@ -429,14 +429,14 @@ if __name__ == "__main__":
                                  mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
 
     env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["../data/offload_random15/random.15."],
+                                graph_file_paths=["../offloading_data/offload_random15_test/random.15."],
                                 time_major=False,
-                                lambda_t=lambda_t, lambda_e=lambda_e)
+                                lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
 
     #env.calculate_optimal_solution()
     eval_envs = []
     eval_env_1 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["../data/offload_random15/random.15."],
+                                graph_file_paths=["../offloading_data/offload_random15_test/random.15."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
     # eval_env_1.calculate_optimal_solution()
@@ -445,19 +445,25 @@ if __name__ == "__main__":
     # eval_env = env
     print("Finishing initialization of environment")
 
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
-        mean_reward_track = learn(network="default", env=env, eval_envs=eval_envs, nsample_episode=20, nupdates=1500,
-                                  max_grad_norm=1.0, noptepochs=1,gamma=0.99,
-                                  total_timesteps=80000, lr=5e-4, optbatchnumber=2000, load_path=None, ent_coef=0.0)
-                                  # load_path='./checkpoint/model.ckpt')
+    for encoder_batch in env.encoder_batchs:
+        print(encoder_batch)
 
-    x = np.arange(0, len(mean_reward_track), 1)
+    for eval_encoder_batch in eval_env_1.encoder_batchs:
+        print(eval_encoder_batch)
 
-    print("Maxmium episode reward is {}".format(np.max(mean_reward_track)))
-
-    import matplotlib.pyplot as plt
-    plt.plot(x, mean_reward_track)
-    plt.xlabel('episode')
-    plt.ylabel('reward')
-    plt.show()
+    # with tf.Session() as sess:
+    #     sess.run(tf.global_variables_initializer())
+    #     mean_reward_track = learn(network="default", env=env, eval_envs=eval_envs, nsample_episode=20, nupdates=1500,
+    #                               max_grad_norm=1.0, noptepochs=1,gamma=0.99,
+    #                               total_timesteps=80000, lr=5e-4, optbatchnumber=2000, load_path=None, ent_coef=0.0)
+    #                               # load_path='./checkpoint/model.ckpt')
+    #
+    # x = np.arange(0, len(mean_reward_track), 1)
+    #
+    # print("Maxmium episode reward is {}".format(np.max(mean_reward_track)))
+    #
+    # import matplotlib.pyplot as plt
+    # plt.plot(x, mean_reward_track)
+    # plt.xlabel('episode')
+    # plt.ylabel('reward')
+    # plt.show()
