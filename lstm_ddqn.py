@@ -308,16 +308,16 @@ if __name__ == "__main__":
     resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
                                  mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
 
-    env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=500, graph_number=500,
+    env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
                                 graph_file_paths=["./RLWorkflow/offloading_data/offload_random10/random.10.",
-                                                  "./RLWorkflow/offloading_data/offload_random15/random.15.",
-                                                  "./RLWorkflow/offloading_data/offload_random20/random.20.",
-                                                  "./RLWorkflow/offloading_data/offload_random25/random.25.",
-                                                  "./RLWorkflow/offloading_data/offload_random30/random.30.",
-                                                  "./RLWorkflow/offloading_data/offload_random35/random.35.",
-                                                  "./RLWorkflow/offloading_data/offload_random40/random.40.",
-                                                  "./RLWorkflow/offloading_data/offload_random45/random.45.",
-                                                  "./RLWorkflow/offloading_data/offload_random50/random.50.",
+                                                  # "./RLWorkflow/offloading_data/offload_random15/random.15.",
+                                                  # "./RLWorkflow/offloading_data/offload_random20/random.20.",
+                                                  # "./RLWorkflow/offloading_data/offload_random25/random.25.",
+                                                  # "./RLWorkflow/offloading_data/offload_random30/random.30.",
+                                                  # "./RLWorkflow/offloading_data/offload_random35/random.35.",
+                                                  # "./RLWorkflow/offloading_data/offload_random40/random.40.",
+                                                  # "./RLWorkflow/offloading_data/offload_random45/random.45.",
+                                                  # "./RLWorkflow/offloading_data/offload_random50/random.50.",
                                                   ],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e,
@@ -333,73 +333,73 @@ if __name__ == "__main__":
     eval_env_1.calculate_heft_cost()
     eval_envs.append(eval_env_1)
 
-    eval_env_2 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./RLWorkflow/offloading_data/offload_random15_test/random.15."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
-    eval_env_2.calculate_heft_cost()
-
-    eval_envs.append(eval_env_2)
-
-    eval_env_3 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./RLWorkflow/offloading_data/offload_random20_test/random.20."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
-    eval_env_3.calculate_heft_cost()
-    eval_envs.append(eval_env_3)
-
-    eval_env_4 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./RLWorkflow/offloading_data/offload_random25_test/random.25."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
-    eval_env_4.calculate_heft_cost()
-
-    eval_envs.append(eval_env_4)
-
-    eval_env_5 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./RLWorkflow/offloading_data/offload_random30_test/random.30."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
-    eval_env_5.calculate_heft_cost()
-
-    eval_envs.append(eval_env_5)
-
-    eval_env_6 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./RLWorkflow/offloading_data/offload_random35_test/random.35."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,  encode_dependencies=False)
-    eval_env_6.calculate_heft_cost()
-    eval_envs.append(eval_env_6)
-
-    eval_env_7 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./RLWorkflow/offloading_data/offload_random40_test/random.40."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,  encode_dependencies=False)
-    eval_env_7.calculate_heft_cost()
-    eval_envs.append(eval_env_7)
-
-    eval_env_8 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./RLWorkflow/offloading_data/offload_random45_test/random.45."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,  encode_dependencies=False)
-    eval_env_8.calculate_heft_cost()
-    eval_envs.append(eval_env_8)
-
-    eval_env_9 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./RLWorkflow/offloading_data/offload_random50_test/random.50."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,  encode_dependencies=False)
-    eval_env_9.calculate_heft_cost()
-    eval_envs.append(eval_env_9)
-    print("Finishing initialization of environment")
+    # eval_env_2 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+    #                                    graph_file_paths=[
+    #                                        "./RLWorkflow/offloading_data/offload_random15_test/random.15."],
+    #                                    time_major=False,
+    #                                    lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
+    # eval_env_2.calculate_heft_cost()
+    #
+    # eval_envs.append(eval_env_2)
+    #
+    # eval_env_3 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+    #                                    graph_file_paths=[
+    #                                        "./RLWorkflow/offloading_data/offload_random20_test/random.20."],
+    #                                    time_major=False,
+    #                                    lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
+    # eval_env_3.calculate_heft_cost()
+    # eval_envs.append(eval_env_3)
+    #
+    # eval_env_4 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+    #                                    graph_file_paths=[
+    #                                        "./RLWorkflow/offloading_data/offload_random25_test/random.25."],
+    #                                    time_major=False,
+    #                                    lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
+    # eval_env_4.calculate_heft_cost()
+    #
+    # eval_envs.append(eval_env_4)
+    #
+    # eval_env_5 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+    #                                    graph_file_paths=[
+    #                                        "./RLWorkflow/offloading_data/offload_random30_test/random.30."],
+    #                                    time_major=False,
+    #                                    lambda_t=lambda_t, lambda_e=lambda_e, encode_dependencies=False)
+    # eval_env_5.calculate_heft_cost()
+    #
+    # eval_envs.append(eval_env_5)
+    #
+    # eval_env_6 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+    #                                    graph_file_paths=[
+    #                                        "./RLWorkflow/offloading_data/offload_random35_test/random.35."],
+    #                                    time_major=False,
+    #                                    lambda_t=lambda_t, lambda_e=lambda_e,  encode_dependencies=False)
+    # eval_env_6.calculate_heft_cost()
+    # eval_envs.append(eval_env_6)
+    #
+    # eval_env_7 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+    #                                    graph_file_paths=[
+    #                                        "./RLWorkflow/offloading_data/offload_random40_test/random.40."],
+    #                                    time_major=False,
+    #                                    lambda_t=lambda_t, lambda_e=lambda_e,  encode_dependencies=False)
+    # eval_env_7.calculate_heft_cost()
+    # eval_envs.append(eval_env_7)
+    #
+    # eval_env_8 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+    #                                    graph_file_paths=[
+    #                                        "./RLWorkflow/offloading_data/offload_random45_test/random.45."],
+    #                                    time_major=False,
+    #                                    lambda_t=lambda_t, lambda_e=lambda_e,  encode_dependencies=False)
+    # eval_env_8.calculate_heft_cost()
+    # eval_envs.append(eval_env_8)
+    #
+    # eval_env_9 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+    #                                    graph_file_paths=[
+    #                                        "./RLWorkflow/offloading_data/offload_random50_test/random.50."],
+    #                                    time_major=False,
+    #                                    lambda_t=lambda_t, lambda_e=lambda_e,  encode_dependencies=False)
+    # eval_env_9.calculate_heft_cost()
+    # eval_envs.append(eval_env_9)
+    # print("Finishing initialization of environment")
 
     model = LSTMDDQN(hparams=hparams, ob_dim=env.input_dim, gamma=0.99, max_grad_norm=1.0)
 
@@ -408,12 +408,12 @@ if __name__ == "__main__":
         ddqn_learning(env=env,
                       eval_envs=eval_envs,
                       ddqn_model=model,
-                      reply_buffer_num=9,
+                      reply_buffer_num=1,
                       reply_buffer_size=100000,
                       final_epsilon=0.01,
                       train_freq=1,
                       target_freq=5,
-                      nupdates=3000,
+                      nupdates=1000,
                       eval_freq=1,
                       warmup_episode=10,
                       nsample_episode=10,
