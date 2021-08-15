@@ -329,7 +329,12 @@ if __name__ == "__main__":
         eval_envs.append(eval_env_1)
         print("Finishing initialization of environment")
 
-        with tf.Session() as sess:
+        # limit the number of cpu cores
+        session_conf = tf.ConfigProto(
+            intra_op_parallelism_threads=4,
+            inter_op_parallelism_threads=4)
+
+        with tf.Session(config=session_conf) as sess:
             model = LSTMDDQN(hparams=hparams, ob_dim=env.input_dim, gamma=0.99, max_grad_norm=1.0)
             sess.run(tf.global_variables_initializer())
             ddqn_learning(env=env,
