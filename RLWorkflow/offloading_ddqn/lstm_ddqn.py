@@ -275,39 +275,41 @@ def ddqn_learning(env,
         if MPI.COMM_WORLD.Get_rank() == 0:
             logger.dumpkvs()
 
-if __name__ == "__main__":
-    lambda_t = 1.0
-    lambda_e = 0.0
 
-    logger.configure('./log/all-graph-latency-optimal', ['stdout', 'json', 'csv'])
+def DDQNTO(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/all-graph-latency-optimal",
+           unit_type="layer_norm_lstm", num_units=256, learning_rate=0.00005, supervised_learning_rate=0.00005,
+           n_features=2, time_major=False, is_attention=True, forget_bias=1.0, dropout=0, num_gpus=1,
+           num_layers=2, num_residual_layers=0, is_greedy=False,
+           inference_model="sample", start_token=0,
+           end_token=5, is_bidencoder=True):
+
+    logger.configure(logpath, ['stdout', 'json', 'csv'])
 
     hparams = tf.contrib.training.HParams(
-        unit_type="layer_norm_lstm",
-        num_units=256,
-        learning_rate=0.00005,
-        supervised_learning_rate=0.00005,
-        n_features=2,
-        time_major=False,
-        is_attention=True,
-        forget_bias=1.0,
-        dropout=0,
-        num_gpus=1,
-        num_layers=2,
-        num_residual_layers=0,
-        is_greedy=False,
-        inference_model="sample",
-        start_token=0,
-        end_token=5,
-        is_bidencoder=True
+        unit_type=unit_type,
+        num_units=num_units,
+        learning_rate=learning_rate,
+        supervised_learning_rate=supervised_learning_rate,
+        n_features=n_features,
+        time_major=time_major,
+        is_attention=is_attention,
+        forget_bias=forget_bias,
+        dropout=dropout,
+        num_gpus=num_gpus,
+        num_layers=num_layers,
+        num_residual_layers=num_residual_layers,
+        is_greedy=is_greedy,
+        inference_model=inference_model,
+        start_token=start_token,
+        end_token=end_token,
+        is_bidencoder=is_bidencoder
     )
 
     resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
                                  mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
 
     env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                graph_file_paths=["../offloading_data/offload_random10/random.10."
-
-                                                  ],
+                                graph_file_paths=["../offloading_data/offload_random10/random.10."],
                                 time_major=False,
                                 lambda_t=lambda_t, lambda_e=lambda_e)
     eval_envs = []
@@ -341,3 +343,7 @@ if __name__ == "__main__":
                       update_numbers=4,
                       load_path=None
                       )
+
+
+if __name__ == "__main__":
+    DDQNTO()

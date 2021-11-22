@@ -271,9 +271,6 @@ def learn(network, env, hparams, total_timesteps, eval_envs = None, seed=None, n
           vf_coef=0.5, max_grad_norm=0.5, gamma=0.99, lam=0.95, optbatchnumber=500,
           log_interval=1, nminibatches=4, noptepochs=4, cliprange=0.2,
           save_interval=0, load_path=None, **network_kwargs):
-
-    #policy = build_policy(env, network, hparameters=hparams)
-
     make_model = lambda: LSTMPPOModel(obs_dim=env.input_dim, hparams=hparams,
                                      ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm)
 
