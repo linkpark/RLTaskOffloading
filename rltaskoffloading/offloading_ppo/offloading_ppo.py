@@ -466,7 +466,7 @@ def learn(hparams, env, eval_envs = None, nupdates=1000, nsample_episode=30, ent
 def DRLTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/DRTO-all-graph-LO",
            unit_type="layer_norm_lstm", num_units=256, learning_rate=0.00005, supervised_learning_rate=0.00005,
            n_features=2, time_major=False, is_attention=True, forget_bias=1.0, dropout=0, num_gpus=1,
-           num_layers=2, num_residual_layers=0, is_greedy=False,
+           num_layers=2, num_residual_layers=0, is_greedy=False, encode_dependencies = True,
            inference_model="sample", start_token=0,
            end_token=5, is_bidencoder=True,
            train_graph_file_paths=["../offloading_data/offload_random10/random.10."],
@@ -502,7 +502,8 @@ def DRLTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/DRTO-all-graph-L
                                 graph_file_paths=train_graph_file_paths,
                                 time_major=False,
                                 lambda_t=lambda_t,
-                                lambda_e=lambda_e)
+                                lambda_e=lambda_e,
+                                encode_dependencies = encode_dependencies)
 
     eval_envs = []
     for path in test_graph_file_paths:
@@ -510,7 +511,7 @@ def DRLTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/DRTO-all-graph-L
                                          graph_file_paths=[path],
                                          time_major=False,
                                          lambda_t=lambda_t, lambda_e=lambda_e,
-                                         encode_dependencies=True)
+                                         encode_dependencies=encode_dependencies)
 
         eval_env.calculate_heft_cost()
         eval_envs.append(eval_env)
@@ -525,7 +526,7 @@ def DRLTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/DRTO-all-graph-L
 def DRLTO_trans(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/all-graph-LO",
            unit_type="layer_norm_lstm", num_units=256, learning_rate=0.00005, supervised_learning_rate=0.00005,
            n_features=2, time_major=False, is_attention=True, forget_bias=1.0, dropout=0, num_gpus=1,
-           num_layers=2, num_residual_layers=0, is_greedy=False,
+           num_layers=2, num_residual_layers=0, is_greedy=False, encode_dependencies=True,
            inference_model="sample", start_token=0,
            end_token=5, is_bidencoder=True,
            train_graph_file_paths=["../offloading_data/offload_random10/random.10."],
@@ -560,15 +561,16 @@ def DRLTO_trans(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/all-graph-LO",
         env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=batch_size, graph_number=graph_number,
                                     graph_file_paths=train_graph_file_paths,
                                     time_major=False,
-                                    lambda_t=lambda_t, lambda_e=lambda_e)
+                                    lambda_t=lambda_t, lambda_e=lambda_e,
+                                    encode_dependencies=encode_dependencies)
 
         eval_envs = []
         eval_env_1 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
                                     graph_file_paths=test_graph_file_paths,
                                     time_major=False,
-                                    lambda_t=lambda_t, lambda_e=lambda_e)
+                                    lambda_t=lambda_t, lambda_e=lambda_e,
+                                    encode_dependencies=encode_dependencies)
         eval_env_1.calculate_heft_cost()
-
         eval_envs.append(eval_env_1)
         print("Finishing initialization of environment")
 

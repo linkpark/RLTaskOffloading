@@ -29,58 +29,60 @@ def train(args):
     graph_paths_train_for_trans = ["./rltaskoffloading/offloading_data/offload_random15/random.15."]
     graph_paths_test_for_trans = ["./rltaskoffloading/offloading_data/offload_random15/random.15."]
 
+    logpath = args.logpath+"-"+args.algo +"-"+args.scenario+"-"+args.goal +"-dependency-" + str(args.dependency)
     if args.algo == "DDQNTO":
         if args.scenario == "Number":
             if args.goal == "LO":
-                DDQNTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath=args.logpath,
+                DDQNTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath=logpath, encode_dependencies=args.dependency,
                               train_graph_file_paths = graph_paths_train_for_number,
                               test_graph_file_paths= graph_paths_test_for_number)
             elif args.goal == "EE":
-                DDQNTO_number(lambda_t=0.5, lambda_e=0.5, logpath=args.logpath,
+                DDQNTO_number(lambda_t=0.5, lambda_e=0.5, logpath=logpath, encode_dependencies=args.dependency,
                               train_graph_file_paths=graph_paths_train_for_number,
                               test_graph_file_paths=graph_paths_test_for_number)
         if args.scenario == "Trans":
             if args.goal == "LO":
-                DDQNTO_trans(lambda_t = 1.0, lambda_e = 0.0, logpath=args.logpath,
+                DDQNTO_trans(lambda_t = 1.0, lambda_e = 0.0, logpath=logpath, encode_dependencies=args.dependency,
                              train_graph_file_paths=graph_paths_train_for_trans,
                              test_graph_file_paths=graph_paths_test_for_trans,
                              bandwidths=[3.0, 7.0, 11.0, 15.0, 19.0])
             elif args.goal == "EE":
-                DDQNTO_trans(lambda_t=0.5, lambda_e=0.5, logpath=args.logpath,
+                DDQNTO_trans(lambda_t=0.5, lambda_e=0.5, logpath=logpath, encode_dependencies=args.dependency,
                              train_graph_file_paths=graph_paths_train_for_trans,
                              test_graph_file_paths=graph_paths_test_for_trans,
                              bandwidths=[3.0, 7.0, 11.0, 15.0, 19.0])
     elif args.algo == "DRLTO":
         if args.scenario == "Number":
             if args.goal == "LO":
-                DRLTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath=args.logpath,
+                DRLTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath=logpath, encode_dependencies=args.dependency,
                               train_graph_file_paths = graph_paths_train_for_number,
                               test_graph_file_paths= graph_paths_test_for_number)
             elif args.goal == "EE":
-                DRLTO_number(lambda_t=0.5, lambda_e=0.5, logpath=args.logpath,
+                DRLTO_number(lambda_t=0.5, lambda_e=0.5, logpath=logpath, encode_dependencies=args.dependency,
                              train_graph_file_paths=graph_paths_train_for_number,
                              test_graph_file_paths=graph_paths_test_for_number)
         if args.scenario == "Trans":
             if args.goal == "LO":
-                DRLTO_trans(lambda_t=1.0, lambda_e=0.0, logpath=args.logpath,
+                DRLTO_trans(lambda_t=1.0, lambda_e=0.0, logpath=logpath, encode_dependencies=args.dependency,
                              train_graph_file_paths=graph_paths_train_for_trans,
                              test_graph_file_paths=graph_paths_test_for_trans,
                              bandwidths=[3.0, 7.0, 11.0, 15.0, 19.0])
             elif args.goal == "EE":
-                DRLTO_trans(lambda_t=0.5, lambda_e=0.5, logpath=args.logpath,
+                DRLTO_trans(lambda_t=0.5, lambda_e=0.5, logpath=logpath, encode_dependencies=args.dependency,
                              train_graph_file_paths=graph_paths_train_for_trans,
                              test_graph_file_paths=graph_paths_test_for_trans,
                              bandwidths=[3.0, 7.0, 11.0, 15.0, 19.0])
     else:
-        raise
+        raise Exception("No defined algorithm")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--algo", type=str, default="DRLTO", choices=["DDQNTO", "DRLTO"])
     parser.add_argument("--scenario", type=str, default="Trans", choices=["Number", "Trans"])
-    parser.add_argument("--goal", type=str, default="LO", choices=["EE", "LO"])
-    parser.add_argument("--logpath", type=str, default="./log/DRLTO-trans-LO")
+    parser.add_argument("--goal", type=str, default="EE", choices=["EE", "LO"])
+    parser.add_argument("--logpath", type=str, default="./log/Result")
+    parser.add_argument("--dependency", type=bool, default=True)
     args = parser.parse_args()
 
     train(args)
