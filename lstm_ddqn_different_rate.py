@@ -6,20 +6,20 @@ import time
 
 from mpi4py import MPI
 
-from RLWorkflow.common.mpi_adam_optimizer import MpiAdamOptimizer
-from RLWorkflow.common.tf_util import get_session, save_variables, load_variables, initialize
-import RLWorkflow.common.tf_util as U
-from RLWorkflow.common.mpi_util import sync_from_root
-from RLWorkflow.common.schedule import LinearSchedule
-from RLWorkflow.common.console_util import fmt_row
-from RLWorkflow.offloading_ddqn.lstm_dqnet import LSTMDuelQnet
-from RLWorkflow import logger
+from rltaskoffloading.common.mpi_adam_optimizer import MpiAdamOptimizer
+from rltaskoffloading.common.tf_util import get_session, save_variables, load_variables, initialize
+import rltaskoffloading.common.tf_util as U
+from rltaskoffloading.common.mpi_util import sync_from_root
+from rltaskoffloading.common.schedule import LinearSchedule
+from rltaskoffloading.common.console_util import fmt_row
+from rltaskoffloading.offloading_ddqn.lstm_dqnet import LSTMDuelQnet
+from rltaskoffloading import logger
 
-from RLWorkflow.environment.offloading_env import OffloadingEnvironment
-from RLWorkflow.environment.offloading_env import Resources
+from rltaskoffloading.environment.offloading_env import OffloadingEnvironment
+from rltaskoffloading.environment.offloading_env import Resources
 
-from RLWorkflow.common.misc_util import zipsame
-from RLWorkflow.offloading_ddqn.seq2seq_replay_buffer import SeqReplayBuffer
+from rltaskoffloading.common.misc_util import zipsame
+from rltaskoffloading.offloading_ddqn.seq2seq_replay_buffer import SeqReplayBuffer
 
 def calculate_qoe(latency_batch, energy_batch, env):
     all_local_time, all_local_energy = env.get_all_locally_execute_time_batch()
@@ -310,7 +310,7 @@ if __name__ == "__main__":
                                      bandwith_dl=bandwidth)
 
         env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=500, graph_number=500,
-                                    graph_file_paths=["./RLWorkflow/offloading_data/offload_random15/random.15."],
+                                    graph_file_paths=["./rltaskoffloading/offloading_data/offload_random15/random.15."],
                                     time_major=False,
                                     lambda_t=lambda_t, lambda_e=lambda_e,
                                     encode_dependencies=False
@@ -319,7 +319,7 @@ if __name__ == "__main__":
         eval_envs = []
         eval_env_1 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
                                            graph_file_paths=[
-                                               "./RLWorkflow/offloading_data/offload_random15_test/random.15."],
+                                               "./rltaskoffloading/offloading_data/offload_random15_test/random.15."],
                                            time_major=False,
                                            lambda_t=lambda_t, lambda_e=lambda_e,
                                            encode_dependencies=False

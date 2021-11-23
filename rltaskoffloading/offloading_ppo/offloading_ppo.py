@@ -11,7 +11,7 @@ from rltaskoffloading.common.tf_util import get_session, save_variables, load_va
 import rltaskoffloading.common.tf_util as U
 from rltaskoffloading.common.mpi_util import sync_from_root
 from rltaskoffloading.common.console_util import fmt_row
-from rltaskoffloading.offloading_ppo.ann_policy import ANNPolicy
+from rltaskoffloading.offloading_ppo.seq2seq_policy import Seq2seqPolicy
 from rltaskoffloading import logger
 
 from rltaskoffloading.environment.offloading_env import OffloadingEnvironment
@@ -37,18 +37,19 @@ def calculate_qoe(latency_batch, energy_batch, env):
 
     return qoe_batch
 
-class ANNPPOModel(object):
-    def __init__(self, obs_dim, action_dim, hidden_units, ent_coef, vf_coef, max_grad_norm):
+class S2SModel(object):
+    def __init__(self, hparams, ob, ob_length, ent_coef, vf_coef, max_grad_norm):
         sess = get_session()
         # sequential state
 
         # sequential action
-        obs = tf.placeholder(tf.float32, [None, None, obs_dim])
+        decoder_input = tf.placeholder(tf.int32, [None, None])
         action = tf.placeholder(tf.int32, [None, None])
+        action_length = tf.placeholder(tf.int32, [None])
         # sequential adv
         adv = tf.placeholder(tf.float32, [None, None])
-        # sequential return
-        ret = tf.placeholder(tf.float32, [None, None])
+        # sequential reward
+        r = tf.placeholder(tf.float32, [None, None])
 
         # keep track of old actor(sequential descision)
         oldneglogpac = tf.placeholder(tf.float32, [None, None])
@@ -58,21 +59,43 @@ class ANNPPOModel(object):
         # Cliprange
         cliprange = tf.placeholder(tf.float32, [])
 
-        train_model = ANNPolicy("pi", obs, action, hidden_units=hidden_units, reuse=True, action_dim=action_dim)
-        act_model = ANNPolicy("oldpi", obs, action, hidden_units=hidden_units, reuse=False, action_dim=action_dim)
+        train_model = Seq2seqPolicy("pi", hparams, reuse=True, encoder_inputs=ob,
+                                     encoder_lengths=ob_length,
+                                     decoder_inputs=decoder_input,
+                                     decoder_full_length=action_length,
+                                     decoder_targets=action)
+        act_model = Seq2seqPolicy("oldpi", hparams, reuse=False, encoder_inputs=ob,
+                                 encoder_lengths=ob_length,
+                                 decoder_inputs=decoder_input,
+                                 decoder_full_length=action_length,
+                                 decoder_targets=action)
 
         assign_old_eq_new = U.function([], [], updates=[tf.assign(oldv, newv)
                                                         for (oldv, newv) in
-                                                        zipsame(act_model.get_variables(),
-                                                                train_model.get_variables())])
+                                                        zipsame(act_model.get_variables(), train_model.get_variables())])
 
+        # neglogpac = train_model.neglogp()
+        # Calculate the entropy
         # Entropy is used to improve exploration by limiting the premature convergence to suboptimal policy.
         entropy = tf.reduce_mean(train_model.entropy())
+        # Calculate the loss
+        # Total loss = Policy gradient loss - entropy * entropy coefficient + Value coefficient * value loss
 
+        # Clip the value to reduce variability during Critic training.
+        # Get the predicted value
         vpred = train_model.vf
-        vf_losses1 = tf.square(vpred - ret)
-        vf_loss = tf.reduce_mean(vf_losses1)
+        vpredclipped = oldvpred + tf.clip_by_value(train_model.vf - oldvpred, -cliprange, cliprange)
+
+        # Unclipped value
+        vf_losses1 = tf.square(vpred - r)
+        # Clipped value
+        vf_losses2 = tf.square(vpredclipped - r)
+
+        vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+
         # Calculate ratio (pi current policy / pi old policy)
+        #ratio = tf.exp(oldneglogpac - neglogpac)
+
         ratio = tf.exp(train_model.logp() - act_model.logp())
 
         # define the loss = -J is equivalent to max J
@@ -81,7 +104,7 @@ class ANNPPOModel(object):
 
         # Final pg loss
         pg_loss = tf.reduce_mean(tf.maximum(pg_losses, pg_losses2))
-        # approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - oldneglogpac))
+        #approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - oldneglogpac))
         kloldnew = act_model.kl(train_model)
         approxkl = tf.reduce_mean(kloldnew)
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), cliprange)))
@@ -110,20 +133,18 @@ class ANNPPOModel(object):
         _train = trainer.apply_gradients(grads_and_var)
 
         # decoder_input action_length is speciallized for the training model
-        def train(learning_reate, clipingrange, input_obs,
-                  returns, advs, actions, values, neglogpacs, states=None):
+        def train(learning_reate, clipingrange, obs, obs_length,
+                  returns, advs, decoder_inputs,  actions, decoder_full_length,
+                  values, neglogpacs, states=None):
             # the advantage function is calculated as A(s,a) = R + yV(s') - V(s)
             # the return = R + yV(s')
 
             # Sequential Normalize the advantages
             advs = (advs - np.mean(advs, axis=0)) / (np.std(advs, axis=0) + 1e-8)
-            input_obs = np.array(input_obs)
-            actions = np.array(actions)
-            returns = np.array(returns)
 
-
-            td_map = {obs: input_obs, action: actions,  adv: advs, ret: returns, lr: learning_reate,
-                      cliprange: clipingrange, oldneglogpac: neglogpacs, oldvpred: values}
+            td_map = {train_model.encoder_inputs: obs, train_model.encoder_lengths:obs_length,
+                      decoder_input:decoder_inputs, action: actions, action_length: decoder_full_length, adv:advs,
+                      r: returns, lr:learning_reate, cliprange:clipingrange, oldneglogpac:neglogpacs, oldvpred: values}
 
             return sess.run([pg_loss, vf_loss, entropy, approxkl, clipfrac, _train], td_map)[:-1]
 
@@ -131,6 +152,7 @@ class ANNPPOModel(object):
 
         self.train = train
         self.train_model = train_model
+        self.time_major = self.train_model.time_major
         self.act_model = act_model
         self.step = act_model.step
         self.greedy_predict = act_model.greedy_predict
@@ -171,7 +193,9 @@ class Runner():
                                                                   self.env.max_running_time_batchs,
                                                                   self.env.min_running_time_batchs):
             for _ in range(self.nepisode):
-                actions, values, neglogpacs = self.model.step(obs=encoder_batch)
+                actions, values, neglogpacs = self.model.step(encoder_input_batch=encoder_batch,
+                                                              decoder_full_length=decoder_lengths,
+                                                              encoder_lengths=encoder_length)
 
                 mb_encoder_batch += encoder_batch.tolist()
                 mb_encoder_length += encoder_length.tolist()
@@ -229,7 +253,9 @@ class Runner():
                                                             in zip(self.env.encoder_batchs, self.env.encoder_lengths,
                                                                   self.env.decoder_full_lengths, self.env.task_graphs):
 
-            actions, values, neglogpacs = self.model.step(obs=encoder_batch)
+            actions, values, neglogpacs = self.model.step(encoder_input_batch=encoder_batch,
+                                                          decoder_full_length=decoder_lengths,
+                                                          encoder_lengths=encoder_length)
             actions = np.array(actions)
             env_running_cost, env_energy_consumption = self.env.get_running_cost(action_sequence_batch=actions,
                                                          task_graph_batch=task_graph_batch)
@@ -249,7 +275,9 @@ class Runner():
         for encoder_batch, encoder_length, decoder_lengths, task_graph_batch \
                 in zip(self.env.encoder_batchs, self.env.encoder_lengths,
                        self.env.decoder_full_lengths, self.env.task_graphs):
-            actions = self.model.greedy_predict(obs=encoder_batch)
+            actions = self.model.greedy_predict(encoder_input_batch=encoder_batch,
+                                                decoder_full_length=decoder_lengths,
+                                                encoder_lengths=encoder_length)
 
             actions = np.array(actions)
 
@@ -263,17 +291,19 @@ class Runner():
             running_qoe += env_qoe
         return running_cost, energy_consumption, env_qoe
 
+def constfn(val):
+    def f(_):
+        return val
+    return f
 
-# the main ppo learning method
-def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1000, nsample_episode=30, nsteps=2048, ent_coef=0.01, lr=1e-4,
+# the main part of ppo learning algorithm
+def learn(hparams, env, eval_envs = None, nupdates=1000, nsample_episode=30, ent_coef=0.01, lr=1e-4,
           vf_coef=0.5, max_grad_norm=0.5, gamma=0.99, lam=0.95, optbatchnumber=500,
-          log_interval=1, nminibatches=4, noptepochs=4, cliprange=0.2,
-          save_interval=0, load_path=None, **network_kwargs):
+          log_interval=1, noptepochs=4, cliprange=0.2, load_path=None):
+    ob = tf.placeholder(dtype=tf.float32, shape=[None, None, env.input_dim])
+    ob_length = tf.placeholder(dtype=tf.int32, shape=[None])
 
-    #policy = build_policy(env, network, hparameters=hparams)
-
-    make_model = lambda: ANNPPOModel(obs_dim=env.input_dim, action_dim=2, hidden_units=256,
-                                     ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm)
+    make_model = lambda: S2SModel(hparams=hparams, ob=ob, ob_length=ob_length, ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm)
 
     model = make_model()
     if load_path is not None:
@@ -285,19 +315,13 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
         for eval_env in eval_envs:
             eval_runners.append(Runner(env=eval_env, model=model, nepisode=1, gamma=gamma, lam=lam))
 
-    # define the saver
-
-    # Start total timer
     tfirststart = time.time()
 
     mean_reward_track = []
     for update in range(1, nupdates+1):
         tstart = time.time()
-        # Get the learning rate
         lrnow = lr
-        # Get the clip range
         cliprangenow = cliprange
-        # Get minibatchs
 
         mb_encoder_batch, mb_encoder_length, mb_decoder_input, mb_actions, mb_decoder_length, \
         mb_values, mb_rewards, mb_neglogpacs, mb_tdlamret, mb_adv = runner.run()
@@ -328,17 +352,30 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
                 encoder_input = batch["encoder_input"]
                 returns_batch = batch["returns"]
                 advs_batch = batch["advs"]
+                decoder_input = batch["decoder_input"]
                 decoder_target = batch["decoder_target"]
                 values_batch = batch["values"]
                 neglogpacs_batch = batch["neglogpacs"]
 
+                if model.time_major == True:
+                    encoder_input = np.array(encoder_input).swapaxes(0,1)
+                    returns_batch = np.array(returns_batch).swapaxes(0,1)
+                    advs_batch = np.array(advs_batch).swapaxes(0,1)
+                    decoder_input = np.array(decoder_input).swapaxes(0,1)
+                    decoder_target = np.array(decoder_target).swapaxes(0,1)
+                    values_batch = np.array(values_batch).swapaxes(0,1)
+                    neglogpacs_batch = np.array(neglogpacs_batch).swapaxes(0,1)
+
                 batch_loss = model.train(
                                 learning_reate=lrnow,
                                 clipingrange=cliprangenow,
-                                input_obs=encoder_input,
+                                obs=encoder_input,
+                                obs_length=batch["encoder_length"],
                                 returns=returns_batch,
                                 advs=advs_batch,
+                                decoder_inputs=decoder_input,
                                 actions=decoder_target,
+                                decoder_full_length=batch["decoder_full_length"],
                                 values=values_batch,
                                 neglogpacs=neglogpacs_batch)
                 mblossvals.append(batch_loss)
@@ -401,7 +438,7 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
                                                                                  running_qoe,
                                                                                  greedy_running_cost,
                                                                                  greedy_energy_consumption,
-                                                                                  greedy_qoe_batch):
+                                                                                 greedy_qoe_batch):
                 logger.logkv(str(j)+'th run time cost ', run_time)
                 logger.logkv(str(j)+'th energy cost ', energy)
                 logger.logkv(str(j)+'th qoe ', running_mean_qoe)
@@ -415,7 +452,6 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
                 logger.logkv(str(j) + 'th HEFT qoe', eval_env.heft_avg_qoe)
                 j += 1
 
-            #logger.logkv('optimal run time cost', eval_env.optimal_solution[0])
             logger.logkv('mean reward', mean_reward)
 
             for (lossval, lossname) in zip(lossvals, model.loss_names):
@@ -427,158 +463,125 @@ def learn(network, env, total_timesteps, eval_envs = None, seed=None, nupdates=1
     return mean_reward_track
 
 
-if __name__ == "__main__":
-    lambda_t = 1.0
-    lambda_e = 0.0
-
-    logger.configure('./log/all-graph-no-dependency-latency-optimal', ['stdout', 'json', 'csv'])
+def DRLTO_number(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/DRTO-all-graph-LO",
+           unit_type="layer_norm_lstm", num_units=256, learning_rate=0.00005, supervised_learning_rate=0.00005,
+           n_features=2, time_major=False, is_attention=True, forget_bias=1.0, dropout=0, num_gpus=1,
+           num_layers=2, num_residual_layers=0, is_greedy=False,
+           inference_model="sample", start_token=0,
+           end_token=5, is_bidencoder=True,
+           train_graph_file_paths=["../offloading_data/offload_random10/random.10."],
+           test_graph_file_paths=["../offloading_data/offload_random10_test/random.10."],
+           batch_size=500, graph_number=500):
+    logger.configure(logpath, ['stdout', 'json', 'csv'])
 
     hparams = tf.contrib.training.HParams(
-        unit_type="layer_norm_lstm",
-        num_units=256,
-        learning_rate=0.00005,
-        supervised_learning_rate=0.00005,
-        n_features=2,
-        time_major=False,
-        is_attention=True,
-        forget_bias=1.0,
-        dropout=0,
-        num_gpus=1,
-        num_layers=2,
-        num_residual_layers=0,
-        is_greedy=False,
-        inference_model="sample",
-        start_token=0,
-        end_token=5,
-        is_bidencoder=True
+        unit_type=unit_type,
+        num_units=num_units,
+        learning_rate=learning_rate,
+        supervised_learning_rate=supervised_learning_rate,
+        n_features=n_features,
+        time_major=time_major,
+        is_attention=is_attention,
+        forget_bias=forget_bias,
+        dropout=dropout,
+        num_gpus=num_gpus,
+        num_layers=num_layers,
+        num_residual_layers=num_residual_layers,
+        is_greedy=is_greedy,
+        inference_model=inference_model,
+        start_token=start_token,
+        end_token=end_token,
+        is_bidencoder=is_bidencoder
     )
 
     resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
                                  mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=7.0, bandwith_dl=7.0)
 
-    env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=500, graph_number=500,
-                                graph_file_paths=["./rltaskoffloading/offloading_data/offload_random10/random.10.",
-                                                  "./rltaskoffloading/offloading_data/offload_random15/random.15.",
-                                                  "./rltaskoffloading/offloading_data/offload_random20/random.20.",
-                                                  "./rltaskoffloading/offloading_data/offload_random25/random.25.",
-                                                  "./rltaskoffloading/offloading_data/offload_random30/random.30.",
-                                                  "./rltaskoffloading/offloading_data/offload_random35/random.35.",
-                                                  "./rltaskoffloading/offloading_data/offload_random40/random.40.",
-                                                  "./rltaskoffloading/offloading_data/offload_random45/random.45.",
-                                                  "./rltaskoffloading/offloading_data/offload_random50/random.50.",
-                                                  ],
+    env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=batch_size,
+                                graph_number=graph_number,
+                                graph_file_paths=train_graph_file_paths,
                                 time_major=False,
                                 lambda_t=lambda_t,
-                                lambda_e=lambda_e,
-                                encode_dependencies=False)
+                                lambda_e=lambda_e)
 
-    # env.calculate_optimal_solution()
     eval_envs = []
-    eval_env_1 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random10_test/random.10."],
-                                       time_major=False,
-                                       lambda_t=lambda_t,
-                                       lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_1.calculate_heft_cost()
+    for path in test_graph_file_paths:
+        eval_env = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
+                                         graph_file_paths=[path],
+                                         time_major=False,
+                                         lambda_t=lambda_t, lambda_e=lambda_e,
+                                         encode_dependencies=True)
 
-    eval_envs.append(eval_env_1)
+        eval_env.calculate_heft_cost()
+        eval_envs.append(eval_env)
 
-    eval_env_2 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random15_test/random.15."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_2.calculate_heft_cost()
-
-    eval_envs.append(eval_env_2)
-
-    eval_env_3 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random20_test/random.20."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_3.calculate_heft_cost()
-    eval_envs.append(eval_env_3)
-
-    eval_env_4 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random25_test/random.25."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_4.calculate_heft_cost()
-
-    eval_envs.append(eval_env_4)
-
-    eval_env_5 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random30_test/random.30."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_5.calculate_heft_cost()
-
-    eval_envs.append(eval_env_5)
-
-    eval_env_6 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random35_test/random.35."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_6.calculate_heft_cost()
-    eval_envs.append(eval_env_6)
-
-    eval_env_7 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random40_test/random.40."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_7.calculate_heft_cost()
-    eval_envs.append(eval_env_7)
-
-    eval_env_8 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random45_test/random.45."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_8.calculate_heft_cost()
-    eval_envs.append(eval_env_8)
-
-    eval_env_9 = OffloadingEnvironment(resource_cluster=resource_cluster, batch_size=100, graph_number=100,
-                                       graph_file_paths=[
-                                           "./rltaskoffloading/offloading_data/offload_random50_test/random.50."],
-                                       time_major=False,
-                                       lambda_t=lambda_t, lambda_e=lambda_e,
-                                       encode_dependencies=False)
-    eval_env_9.calculate_heft_cost()
-    eval_envs.append(eval_env_9)
     print("Finishing initialization of environment")
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        mean_reward_track = learn(network="default", env=env, eval_envs=eval_envs, nsample_episode=10, nupdates=3000,
-                                  max_grad_norm=1.0, noptepochs=4, gamma=0.99,
-                                  total_timesteps=80000, lr=5e-4, optbatchnumber=500)
+        learn(hparams= hparams, env=env, eval_envs=eval_envs, nsample_episode=10, nupdates=3000,
+              max_grad_norm=1.0, noptepochs=4, gamma=0.99, lr=5e-4, optbatchnumber=500)
 
-    x = np.arange(0, len(mean_reward_track), 1)
+def DRLTO_trans(lambda_t = 1.0, lambda_e = 0.0, logpath="./log/all-graph-LO",
+           unit_type="layer_norm_lstm", num_units=256, learning_rate=0.00005, supervised_learning_rate=0.00005,
+           n_features=2, time_major=False, is_attention=True, forget_bias=1.0, dropout=0, num_gpus=1,
+           num_layers=2, num_residual_layers=0, is_greedy=False,
+           inference_model="sample", start_token=0,
+           end_token=5, is_bidencoder=True,
+           train_graph_file_paths=["../offloading_data/offload_random10/random.10."],
+           test_graph_file_paths=["../offloading_data/offload_random10_test/random.10."],
+           batch_size=500, graph_number=500,
+           bandwidths=[3.0, 7.0, 11.0, 15.0, 19.0]):
+    hparams = tf.contrib.training.HParams(
+        unit_type=unit_type,
+        num_units=num_units,
+        learning_rate=learning_rate,
+        supervised_learning_rate=supervised_learning_rate,
+        n_features=n_features,
+        time_major=time_major,
+        is_attention=is_attention,
+        forget_bias=forget_bias,
+        dropout=dropout,
+        num_gpus=num_gpus,
+        num_layers=num_layers,
+        num_residual_layers=num_residual_layers,
+        is_greedy=is_greedy,
+        inference_model=inference_model,
+        start_token=start_token,
+        end_token=end_token,
+        is_bidencoder=is_bidencoder
+    )
 
-    print("Maxmium episode reward is {}".format(np.max(mean_reward_track)))
+    def test_case(bandwidth=5.0, log_path='./log/zhan-transrate-5Mbps', lambda_t = 1.0, lambda_e = 1.0):
+        logger.configure(log_path, ['stdout', 'json', 'csv'])
+        resource_cluster = Resources(mec_process_capable=(10.0 * 1024 * 1024),
+                                     mobile_process_capable=(1.0 * 1024 * 1024), bandwith_up=bandwidth, bandwith_dl=bandwidth)
 
-    import matplotlib.pyplot as plt
+        env = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=batch_size, graph_number=graph_number,
+                                    graph_file_paths=train_graph_file_paths,
+                                    time_major=False,
+                                    lambda_t=lambda_t, lambda_e=lambda_e)
 
-    plt.plot(x, mean_reward_track)
-    plt.xlabel('episode')
-    plt.ylabel('reward')
-    plt.show()
+        eval_envs = []
+        eval_env_1 = OffloadingEnvironment(resource_cluster = resource_cluster, batch_size=100, graph_number=100,
+                                    graph_file_paths=test_graph_file_paths,
+                                    time_major=False,
+                                    lambda_t=lambda_t, lambda_e=lambda_e)
+        eval_env_1.calculate_heft_cost()
+
+        eval_envs.append(eval_env_1)
+        print("Finishing initialization of environment")
+
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            learn(hparams=hparams, env=env, eval_envs=eval_envs, nsample_episode=10, nupdates=3000,
+                  max_grad_norm=1.0, noptepochs=4, gamma=0.99, lr=5e-4, optbatchnumber=500)
+            sess.close()
+        tf.reset_default_graph()
+
+    for bandwidth in bandwidths:
+        test_case(bandwidth=bandwidth,  lambda_t=lambda_t, lambda_e=lambda_e, log_path=logpath + '-' + str(bandwidth) +'Mbps')
 
 
-
-
-
+if __name__ == "__main__":
+    DRLTO_trans()
