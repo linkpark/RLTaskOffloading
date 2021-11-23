@@ -1,7 +1,7 @@
 import argparse
 
 import os, os.path
-from rltaskoffloading.environment.offloading_env_test_different_n import evaluate_different_number, evaluate_different_trans
+from rltaskoffloading.environment.offloading_env_test_heuristics import evaluate_different_number, evaluate_different_trans
 
 def evluate(args):
     graph_paths_test_for_number = ["./rltaskoffloading/offloading_data/offload_random10_test/random.10.",

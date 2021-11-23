@@ -45,8 +45,8 @@ def evaluate_different_number(graph_file_pahts, lambda_t=1.0, lambda_e=0.0, logp
                                time_major=False,
                                lambda_t=lambda_t,
                                lambda_e=lambda_e)
-        # if env.task_graphs[0][0].task_number < 20:
-        #     env.calculate_optimal_qoe()
+        if env.task_graphs[0][0].task_number < 20:
+            env.calculate_optimal_qoe()
 
         # Calculate the heft algorithms latency, energy and qoe
         plans, finish_time_batchs = env.greedy_solution(heft=True)
@@ -136,7 +136,7 @@ def evaluate_different_trans(graph_file_paths, lambda_t=1.0,
                                     lambda_t=lambda_t,
                                     lambda_e=lambda_e)
 
-        #env.calculate_optimal_qoe()
+        env.calculate_optimal_qoe()
 
         # Calculate the heft algorithms latency, energy and qoe
         plans, finish_time_batchs = env.greedy_solution(heft=True)
