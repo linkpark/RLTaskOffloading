@@ -1,0 +1,46 @@
+name: RLTaskOffloading
+channels:
+  - defaults
+dependencies:
+  - certifi=2020.6.20=pyhd3eb1b0_3
+  - console_shortcut=0.1.1=4
+  - pip=21.2.2=py36haa95532_0
+  - python=3.6.13=h3758d61_0
+  - setuptools=58.0.4=py36haa95532_0
+  - sqlite=3.36.0=h2bbff1b_0
+  - vc=14.2=h21ff451_1
+  - vs2015_runtime=14.27.29016=h5e58377_2
+  - wheel=0.37.0=pyhd3eb1b0_1
+  - wincertstore=0.2=py36h7fe50ca_0
+  - pip:
+    - absl-py==1.0.0
+    - astor==0.8.1
+    - cached-property==1.5.2
+    - cloudpickle==2.0.0
+    - dataclasses==0.8
+    - gast==0.2.2
+    - google-pasta==0.2.0
+    - grpcio==1.42.0
+    - gym==0.21.0
+    - h5py==3.1.0
+    - importlib-metadata==4.8.2
+    - joblib==1.1.0
+    - keras-applications==1.0.8
+    - keras-preprocessing==1.1.2
+    - markdown==3.3.6
+    - mpi4py==3.1.2
+    - numpy==1.19.5
+    - opt-einsum==3.3.0
+    - protobuf==3.19.1
+    - pydotplus==2.0.2
+    - pyparsing==3.0.6
+    - python-graphviz==0.18.2
+    - six==1.16.0
+    - tensorboard==1.15.0
+    - tensorflow-estimator==1.15.1
+    - tensorflow-gpu==1.15.0
+    - termcolor==1.1.0
+    - typing-extensions==4.0.0
+    - werkzeug==2.0.2
+    - wrapt==1.13.3
+    - zipp==3.6.0
