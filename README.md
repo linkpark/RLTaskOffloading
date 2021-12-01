@@ -1,7 +1,7 @@
 # RLTaskOffloading
 
 ## Prerequisites 
-Baselines requires python3 (>=3.5) with the development headers. You'll also need system packages CMake, OpenMPI, graphviz and zlib. Those can be installed as follows
+The code requires python3 (>=3.5) with the development headers. You'll also need system packages CMake, OpenMPI, graphviz and zlib. Those can be installed as follows
 ### Ubuntu 
     
 ```bash
@@ -10,7 +10,7 @@ sudo apt-get install graphviz
 ```
 
 ### Configure the virtual environment:
-It is better to use virtual environment (e.g., Anaconda) to run the code. About how to install anaconda please refer to the official website: https://www.anaconda.com
+It is better to use a virtual environment (e.g., Anaconda) to run the code. About how to install anaconda, please refer to the official website: https://www.anaconda.com
 
 Once you have anaconda installed, run 
 
@@ -18,9 +18,9 @@ Once you have anaconda installed, run
 conda env create -f environment.yaml
 ```
 
-to create the virtual environment. The current version of the code only support tensorflow 1.x (>=1.5).  
+To create the virtual environment. The current version of the code only supports TensorFlow 1.x (>=1.5).
 
-### Run the code
+#### Run the code
 We implemented two DRL-based algorithms for task offloading: DRLTO and DDQNTO. 
 
 To train and evaluate DRLTO under different scenarios, run
