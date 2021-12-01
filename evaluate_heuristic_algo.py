@@ -23,12 +23,12 @@ def evluate(args):
     logpath = args.logpath+"/heuristic-evaluate-"+args.scenario+"-"+args.goal + ".txt"
 
     if args.scenario == "Number":
-        if args.goal == "LE":
+        if args.goal == "LO":
             evaluate_different_number(graph_paths_test_for_number, lambda_t=1.0, lambda_e=0.0, logpath=logpath)
         elif args.goal == "EE":
             evaluate_different_number(graph_paths_test_for_number, lambda_t=0.5, lambda_e=0.5, logpath=logpath)
     elif args.scenario == "Trans":
-        if args.goal == "LE":
+        if args.goal == "LO":
             evaluate_different_trans(graph_paths_test_for_trans, lambda_t=1.0,
                                      lambda_e=0.0, bandwidths=[3.0, 7.0, 11.0, 15.0, 19.0],logpath=logpath)
         elif args.goal == "EE":
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--scenario", type=str, default="Trans", choices=["Number", "Trans"])
-    parser.add_argument("--goal", type=str, default="LE", choices=["EE", "LO"])
+    parser.add_argument("--goal", type=str, default="LO", choices=["EE", "LO"])
     parser.add_argument("--logpath", type=str, default="./log")
     args = parser.parse_args()
 
