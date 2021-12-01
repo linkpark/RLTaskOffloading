@@ -57,9 +57,9 @@ The running results can be found in the log folder (default path of log folder i
 
 To evaluate the heuristic algorithms, run
 ```bash
-python evaluate_heuristic_algo.py --scenario Number --goal LE
+python evaluate_heuristic_algo.py --scenario Number --goal LO
 python evaluate_heuristic_algo.py --scenario Number --goal EE
-python evaluate_heuristic_algo.py --scenario Trans --goal LE
+python evaluate_heuristic_algo.py --scenario Trans --goal LO
 python evaluate_heuristic_algo.py --scenario Trans --goal EE
 ```
 
